@@ -423,6 +423,44 @@ html, body {
 .healthy-stat  .hud-number { color: var(--tx-1); }
 .cure-stat     .hud-number { color: var(--blue); }
 
+/* Daily rate sub-label */
+.hud-rate {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  font-weight: 500;
+  color: var(--tx-3);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  line-height: 1;
+  min-height: 0.5rem;
+}
+.dead-stat     .hud-rate { color: rgba(248,81,73,0.55); }
+.infected-stat .hud-rate { color: rgba(227,179,65,0.55); }
+.cure-stat     .hud-rate { color: rgba(88,166,255,0.55); }
+
+/* Stealth mode badge */
+.stealth-badge {
+  position: fixed;
+  right: 10px;
+  top: 58px;   /* just below the HUD top bar */
+  z-index: 35;
+  background: rgba(13,17,23,0.88);
+  border: 1px solid rgba(63,185,80,0.45);
+  color: var(--green);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 3px 9px;
+  border-radius: 4px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  animation: stealthPulse 2.8s ease-in-out infinite;
+}
+@keyframes stealthPulse {
+  0%,100% { opacity: 0.65; box-shadow: none; }
+  50%      { opacity: 1;    box-shadow: 0 0 10px rgba(63,185,80,0.3); }
+}
+
 /* Cure progress bar */
 .cure-bar-container {
   position: absolute; top: 55px; left: 0; right: 0;

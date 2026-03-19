@@ -53,6 +53,10 @@ const Game = (() => {
     notifications: [],
     peakInfected: 0,
     originIso: null,
+
+    // DNA Bubbles
+    bubbles:      [],
+    nextBubbleId: 0,
   };
 
   const BASE_TICK_MS  = 750;
@@ -93,6 +97,8 @@ const Game = (() => {
     state.airportsOpen = true; state.bordersClosed = false;
     state.peakInfected = 0;
     state.originIso = null;
+    state.bubbles = [];
+    state.nextBubbleId = 0;
     tickCount = 0;
     _history = [];
 
@@ -246,6 +252,9 @@ const Game = (() => {
 
     // ── VIRUS MUTATION ──
     if (td.mutationRate && Math.random() < td.mutationRate * state.speed) handleMutation();
+
+    // ── DNA BUBBLES (every 4 game days) ──
+    if (tickCount % (TICKS_PER_DAY * 4) === 0) _maybeSpawnBubble();
 
     // ── EVENTS ──
     tickEvents();
@@ -468,6 +477,47 @@ const Game = (() => {
     applyEffects(t, 0.25);
     toast(`🧬 Mutation! ${t.name} partially evolved`, 'dna');
     UI.updateStatBars();
+  }
+
+  // ─── DNA BUBBLES ──────────────────────────────
+  function _maybeSpawnBubble() {
+    if (state.bubbles.length >= 4) return;
+    const infected = Object.values(state.countries).filter(
+      c => c.reached && c.infected > 5000
+    );
+    if (!infected.length) return;
+
+    const c = infected[Math.floor(Math.random() * infected.length)];
+    const infPct = c.infected / c.pop;
+    const value = infPct > 0.25 ? 3 : infPct > 0.05 ? 2 : 1;
+
+    const id = state.nextBubbleId++;
+    // Spread bubbles using golden angle so they don't overlap
+    const angle = (id * 137.508) % 360 * (Math.PI / 180);
+    const radius = 10 + (id % 3) * 5;
+    state.bubbles.push({
+      id,
+      iso: c.iso,
+      value,
+      expiresDay: state.day + 10,
+      dx: Math.cos(angle) * radius,
+      dy: Math.sin(angle) * radius,
+    });
+  }
+
+  function collectBubble(id) {
+    const idx = state.bubbles.findIndex(b => b.id === id);
+    if (idx === -1) return 0;
+    const val = state.bubbles[idx].value;
+    state.bubbles.splice(idx, 1);
+    awardDna(val);
+    return val;
+  }
+
+  function getBubbles() {
+    // Expire old bubbles
+    state.bubbles = state.bubbles.filter(b => b.expiresDay > state.day);
+    return [...state.bubbles];
   }
 
   // ─── EVENTS TICK ──────────────────────────────
@@ -705,6 +755,8 @@ const Game = (() => {
     state.tickInterval   = null;
     state.pendingDna     = 0;
     state.totalHealthy   = state.totalPop - state.totalInfected - state.totalDead;
+    state.bubbles        = [];
+    state.nextBubbleId   = 0;
     return true;
   }
 
@@ -750,6 +802,7 @@ const Game = (() => {
     awardDna, toast,
     getState, getStats, getCountry, getAllCountries,
     getHistory: () => _history,
+    getBubbles, collectBubble,
     saveGame, loadSave, hasSave, clearSave, getSaveMeta,
   };
 })();

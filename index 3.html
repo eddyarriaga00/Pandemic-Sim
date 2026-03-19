@@ -39,7 +39,6 @@
         <div class="stat-pill" id="pill-version">v2.0</div>
       </div>
       <button class="btn-primary pulse-btn" id="btn-start">☣ INITIATE OUTBREAK</button>
-      <button class="btn-secondary btn-load-save hidden" id="btn-load-save">💾 CONTINUE SAVED GAME</button>
       <div class="splash-secondary-btns">
         <button class="btn-secondary" id="btn-how-to-play">HOW TO PLAY</button>
         <button class="btn-secondary" id="btn-settings">⚙ SETTINGS</button>
@@ -230,7 +229,6 @@
         <div class="hud-values">
           <span class="hud-label">DEAD</span>
           <span class="hud-number" id="hud-dead">0</span>
-          <span class="hud-rate" id="hud-dead-rate"></span>
         </div>
       </div>
       <div class="hud-stat infected-stat">
@@ -238,7 +236,6 @@
         <div class="hud-values">
           <span class="hud-label">INFECTED</span>
           <span class="hud-number" id="hud-infected">0</span>
-          <span class="hud-rate" id="hud-inf-rate"></span>
         </div>
       </div>
       <div class="hud-stat healthy-stat">
@@ -253,7 +250,6 @@
         <div class="hud-values">
           <span class="hud-label">CURE</span>
           <span class="hud-number" id="hud-cure">0%</span>
-          <span class="hud-rate" id="hud-cure-rate"></span>
         </div>
       </div>
       <button class="music-btn" id="btn-music" title="Toggle music">♪</button>
@@ -264,9 +260,6 @@
       <div class="cure-bar" id="cure-bar"></div>
       <div class="cure-label" id="cure-label"></div>
     </div>
-    <!-- STEALTH BADGE -->
-    <div class="stealth-badge hidden" id="stealth-badge" title="Disease undetected — cure research paused">🟢 STEALTH</div>
-
     <!-- THREAT LEVEL METER -->
     <div class="threat-bar-container" id="threat-bar-container">
       <div class="threat-label">THREAT</div>
@@ -536,14 +529,14 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=6"></script>
-  <script src="js/game.js?v=6"></script>
-  <script src="js/map.js?v=6"></script>
-  <script src="js/evolution.js?v=6"></script>
-  <script src="js/ui.js?v=6"></script>
-  <script src="js/events.js?v=6"></script>
-  <script src="js/audio.js?v=6"></script>
-  <script src="js/news-popup.js?v=6"></script>
-  <script src="js/main.js?v=6"></script>
+  <script src="js/data.js?v=3"></script>
+  <script src="js/game.js?v=3"></script>
+  <script src="js/map.js?v=3"></script>
+  <script src="js/evolution.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/events.js?v=3"></script>
+  <script src="js/audio.js?v=3"></script>
+  <script src="js/news-popup.js?v=3"></script>
+  <script src="js/main.js?v=3"></script>
 </body>
 </html>

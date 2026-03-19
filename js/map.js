@@ -9,6 +9,7 @@ const Map = (() => {
   let centroids       = {};
   let centroidLayer   = null;
   let epicenterLayer  = null;
+  let bubbleLayer     = null;
   let mapInitialized  = false;
   let selectedIso     = null;
   let originIso       = null;
@@ -171,8 +172,10 @@ const Map = (() => {
 
     // Infection dot layer (above countries)
     centroidLayer  = g.append('g').attr('class', 'centroid-layer');
-    // Epicenter ring layer (topmost)
+    // Epicenter ring layer
     epicenterLayer = g.append('g').attr('class', 'epicenter-layer');
+    // DNA Bubble layer (topmost — player clicks these)
+    bubbleLayer    = g.append('g').attr('class', 'bubble-layer');
 
     // Ocean click dismiss
     svg.on('click', event => {
@@ -324,6 +327,8 @@ const Map = (() => {
 
     // Update infection intensity dots every 3 color refreshes
     if (_colorUpdateCount % 3 === 0) updateInfectionDots();
+    // Update DNA bubble layer every 4 refreshes
+    if (_colorUpdateCount % 4 === 0) updateBubbles();
   }
 
   // ─── INFECTION DOTS ───────────────────────────
@@ -363,6 +368,118 @@ const Map = (() => {
       });
 
     dots.exit().transition().duration(600).attr('r', 0).remove();
+  }
+
+  // ─── DNA BUBBLES ──────────────────────────────
+  function updateBubbles() {
+    if (!bubbleLayer) return;
+    const gs = Game.getState();
+    if (gs.phase !== 'spreading') return;
+
+    const bubbles = Game.getBubbles();
+
+    const sel = bubbleLayer.selectAll('.dna-bubble').data(bubbles, d => d.id);
+
+    // Enter
+    const enter = sel.enter()
+      .append('g')
+      .attr('class', 'dna-bubble')
+      .attr('cursor', 'pointer')
+      .style('opacity', 0)
+      .attr('transform', d => bubbleTransform(d))
+      .on('click', function(event, d) {
+        event.stopPropagation();
+        const val = Game.collectBubble(d.id);
+        if (!val) return;
+        if (typeof AudioEngine !== 'undefined') AudioEngine.sfxDNA();
+
+        // Float "+N DNA" text at bubble location
+        const c = centroids[d.iso];
+        if (c && epicenterLayer) {
+          const ft = epicenterLayer.append('text')
+            .attr('x', c[0] + d.dx)
+            .attr('y', c[1] + d.dy - 8)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#3fb950')
+            .attr('font-size', '9px')
+            .attr('font-weight', '700')
+            .attr('font-family', 'Inter, system-ui, sans-serif')
+            .attr('pointer-events', 'none')
+            .text(`+${val} DNA`);
+          ft.transition().duration(1000).ease(d3.easeCubicOut)
+            .attr('y', c[1] + d.dy - 26)
+            .style('opacity', 0)
+            .remove();
+        }
+      });
+
+    // Glow circle (background)
+    enter.append('circle')
+      .attr('class', 'bubble-bg')
+      .attr('r', 8)
+      .attr('fill', 'rgba(63,185,80,0.15)')
+      .attr('stroke', '#3fb950')
+      .attr('stroke-width', 1.2)
+      .attr('pointer-events', 'all');
+
+    // Pulse ring animation (CSS keyframe via class)
+    enter.append('circle')
+      .attr('class', 'bubble-pulse')
+      .attr('r', 8)
+      .attr('fill', 'none')
+      .attr('stroke', 'rgba(63,185,80,0.6)')
+      .attr('stroke-width', 1)
+      .attr('pointer-events', 'none');
+
+    // ⚡ icon
+    enter.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('font-size', '8px')
+      .attr('pointer-events', 'none')
+      .text('⚡');
+
+    // DNA value label
+    enter.append('text')
+      .attr('class', 'bubble-val')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('y', 11)
+      .attr('font-size', '6px')
+      .attr('fill', '#3fb950')
+      .attr('pointer-events', 'none')
+      .text(d => `+${d.value}`);
+
+    // Animate in
+    enter.transition().duration(300).ease(d3.easeCubicOut)
+      .style('opacity', 1)
+      .attr('transform', d => bubbleTransform(d));
+
+    // Update positions on existing (e.g. after resize)
+    sel.attr('transform', d => bubbleTransform(d));
+
+    // Hover effects
+    enter.on('mouseover', function() {
+      d3.select(this).select('.bubble-bg')
+        .attr('fill', 'rgba(63,185,80,0.35)')
+        .attr('stroke', '#79c0ff');
+    }).on('mouseout', function() {
+      d3.select(this).select('.bubble-bg')
+        .attr('fill', 'rgba(63,185,80,0.15)')
+        .attr('stroke', '#3fb950');
+    });
+
+    // Exit
+    sel.exit()
+      .transition().duration(400)
+      .style('opacity', 0)
+      .remove();
+  }
+
+  function bubbleTransform(d) {
+    const c = centroids[d.iso];
+    if (!c) return 'translate(0,0)';
+    return `translate(${c[0] + d.dx}, ${c[1] + d.dy})`;
   }
 
   // ─── EPICENTER ────────────────────────────────
@@ -486,6 +603,7 @@ const Map = (() => {
           .attr('cy', d => centroids[d.iso]?.[1] ?? 0);
       }
       if (originIso) setOrigin(originIso);
+      updateBubbles();
     }
   }
 

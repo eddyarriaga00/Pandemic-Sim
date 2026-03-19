@@ -478,6 +478,35 @@ const UI = (() => {
           if (deadEl) deadEl.style.color = '#ff2244';
         }
 
+        // Daily rate display (computed from last 2 history snapshots)
+        const hist = Game.getHistory();
+        if (hist.length >= 2) {
+          const prev = hist[hist.length - 2];
+          const curr = hist[hist.length - 1];
+          const infDelta  = curr.infected - prev.infected;
+          const deadDelta = curr.dead     - prev.dead;
+          const cureDelta = curr.cure     - prev.cure;
+
+          const infRateEl  = document.getElementById('hud-inf-rate');
+          const deadRateEl = document.getElementById('hud-dead-rate');
+          const cureRateEl = document.getElementById('hud-cure-rate');
+
+          if (infRateEl)  infRateEl.textContent  = infDelta  >= 0 ? `+${fmt(infDelta)}/d`  : `${fmt(infDelta)}/d`;
+          if (deadRateEl) deadRateEl.textContent = deadDelta >= 0 ? `+${fmt(deadDelta)}/d` : '';
+          if (cureRateEl && gs.cureActive) cureRateEl.textContent = cureDelta > 0 ? `+${cureDelta.toFixed(1)}%/d` : '';
+          else if (cureRateEl && !gs.cureActive) cureRateEl.textContent = '';
+        }
+
+        // Stealth badge — shown when cure not yet triggered
+        const stealthEl = document.getElementById('stealth-badge');
+        if (stealthEl) {
+          if (!gs.cureActive && gs.phase === 'spreading' && gs.totalInfected > 0) {
+            stealthEl.classList.remove('hidden');
+          } else {
+            stealthEl.classList.add('hidden');
+          }
+        }
+
         // Cure milestone sounds at 25 / 50 / 75 %
         for (const m of [25, 50, 75]) {
           if (_disp.cure >= m && !cureMilestones.has(m)) {
