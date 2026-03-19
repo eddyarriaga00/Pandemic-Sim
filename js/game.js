@@ -204,11 +204,13 @@ const Game = (() => {
       newInfected += c.infected;
       newDead     += c.dead;
 
-      // DNA accrual
-      if (newCases > 0) state.pendingDna += newCases / 800000;
+      // DNA accrual (scaled by disease DNA modifier)
+      const dnaMod = DISEASE_TYPES[state.diseaseType].dnaMod || 1.0;
+      if (newCases > 0) state.pendingDna += (newCases / 800000) * dnaMod;
 
-      // Cure trigger
-      if (!state.cureActive && state.severity > 0.10 && c.infected > c.pop * 0.0003) {
+      // Cure trigger — stealthy diseases require higher severity to detect
+      const stealthCureTrigger = DISEASE_TYPES[state.diseaseType].stealthy ? 0.22 : 0.10;
+      if (!state.cureActive && state.severity > stealthCureTrigger && c.infected > c.pop * 0.0003) {
         state.cureActive = true;
         toast('🔬 Governments begin cure research!', 'cure');
         Events.triggerNews('cure');
@@ -382,10 +384,13 @@ const Game = (() => {
     const seed = Math.max(8, Math.floor(dst.pop * 0.0000007));
     dst.infected = seed; dst.healthy = dst.pop - seed; dst.reached = true;
     state.countriesInfected++;
+
+    // DNA bonus scales with country population (bigger countries = more DNA)
+    const dnaBonusPop = dst.pop >= 100e6 ? 6 : dst.pop >= 50e6 ? 5 : dst.pop >= 10e6 ? 4 : 3;
     toast(`🌍 ${state.diseaseName} spreads to ${dst.name} via ${method}`, 'info');
     if (typeof AudioEngine !== 'undefined') AudioEngine.sfxNewCountry();
     Events.triggerNews('spreading');
-    awardDna(3);
+    awardDna(dnaBonusPop);
     if (Map && Map.pulseCountry) Map.pulseCountry(dst.iso);
     if (Map && Map.showTravelRoute && srcIso != null) Map.showTravelRoute(srcIso, dst.iso);
   }
@@ -396,11 +401,21 @@ const Game = (() => {
   }
   function pickUninfectedWithAirports() {
     const arr = Object.values(state.countries).filter(c => !c.reached && c.airports > 0 && !c.airportClosed);
-    return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
+    if (!arr.length) return null;
+    // Weight by airport count — major hubs are more likely destinations
+    const totalWeight = arr.reduce((s, c) => s + c.airports * c.airports, 0);
+    let r = Math.random() * totalWeight;
+    for (const c of arr) { r -= c.airports * c.airports; if (r <= 0) return c; }
+    return arr[arr.length - 1];
   }
   function pickUninfectedWithPorts() {
     const arr = Object.values(state.countries).filter(c => !c.reached && c.ports > 0);
-    return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
+    if (!arr.length) return null;
+    // Weight by port count
+    const totalWeight = arr.reduce((s, c) => s + c.ports, 0);
+    let r = Math.random() * totalWeight;
+    for (const c of arr) { r -= c.ports; if (r <= 0) return c; }
+    return arr[arr.length - 1];
   }
 
   // ─── CURE RESEARCH ────────────────────────────
@@ -420,6 +435,10 @@ const Game = (() => {
 
     // Difficulty
     rate *= diff.cureSpeed;
+
+    // Disease-specific cure modifier (prions hard to cure, nano-virus easy)
+    const cureMod = DISEASE_TYPES[state.diseaseType].cureMod || 1.0;
+    rate *= cureMod;
 
     // Resistance
     const resist = Math.min(0.88, state.cureResist + state.eventBoosts.cureResist);

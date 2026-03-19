@@ -8,6 +8,32 @@ const Events = (() => {
   let newsPool     = [];
   let newsIndex    = 0;
 
+  // ─── MILESTONE TRACKING ───────────────────────
+  const _milestones = {
+    infected:  new Set(),
+    dead:      new Set(),
+    countries: new Set(),
+    dna:       new Set(),
+  };
+
+  const INF_MILESTONES = [
+    { val: 1e6,   msg: '🌍 1 million people infected worldwide',             type: 'alert' },
+    { val: 10e6,  msg: '🌍 10 million infected — outbreak accelerating',     type: 'alert' },
+    { val: 100e6, msg: '🌍 100 million infected — global pandemic confirmed', type: 'alert' },
+    { val: 500e6, msg: '🌍 500 million infected — half a billion souls',      type: 'alert' },
+    { val: 1e9,   msg: '🌍 1 BILLION infected — civilisation under siege',   type: 'alert' },
+    { val: 3e9,   msg: '🌍 3 BILLION — the majority of humanity is infected', type: 'alert' },
+  ];
+
+  const DEAD_MILESTONES = [
+    { val: 100000, msg: '☠ 100,000 deaths confirmed globally',                      type: 'alert' },
+    { val: 1e6,    msg: '☠ 1 million dead — world leaders declare day of mourning', type: 'alert' },
+    { val: 10e6,   msg: '☠ 10 million dead worldwide',                              type: 'alert' },
+    { val: 100e6,  msg: '☠ 100 million dead — civilisation fracturing at its seams', type: 'alert' },
+    { val: 1e9,    msg: '☠ 1 BILLION dead — extinction protocol begins',            type: 'alert' },
+    { val: 4e9,    msg: '☠ Over half of humanity has perished',                     type: 'alert' },
+  ];
+
   // ─── NEWS TEMPLATES ───────────────────────────
   const TEMPLATES = {
     early: [
@@ -72,6 +98,56 @@ const Events = (() => {
       'Last commercial flight lands as airports worldwide go dark',
     ],
   };
+
+  // ─── ON TICK: MILESTONES ──────────────────────
+  function onTick(gs) {
+    if (!gs || gs.phase !== 'spreading') return;
+
+    // Infection milestones
+    for (const m of INF_MILESTONES) {
+      if (!_milestones.infected.has(m.val) && gs.totalInfected >= m.val) {
+        _milestones.infected.add(m.val);
+        UI.toast(m.msg, m.type);
+        triggerNews('spreading');
+      }
+    }
+
+    // Death milestones
+    for (const m of DEAD_MILESTONES) {
+      if (!_milestones.dead.has(m.val) && gs.totalDead >= m.val) {
+        _milestones.dead.add(m.val);
+        UI.toast(m.msg, m.type);
+        if (gs.totalDead >= 1e6) triggerNews('lethality');
+      }
+    }
+
+    // Country infection milestones
+    const totalCountries = Object.keys(gs.countries).length;
+    if (totalCountries > 0) {
+      const infectedPct = gs.countriesInfected / totalCountries;
+      const countryMilestones = [
+        { pct: 0.25, key: 25,  dna: 5,  msg: (n) => `🌐 ${n} now in 25% of the world's nations` },
+        { pct: 0.50, key: 50,  dna: 10, msg: (n) => `🌐 ${n} detected in half the world — containment failing` },
+        { pct: 0.75, key: 75,  dna: 15, msg: (n) => `🌐 ${n} in 75% of nations — is anything left to stop it?` },
+        { pct: 1.00, key: 100, dna: 25, msg: (n) => `🌐 ${n} has reached EVERY NATION ON EARTH` },
+      ];
+      for (const m of countryMilestones) {
+        if (!_milestones.countries.has(m.key) && infectedPct >= m.pct) {
+          _milestones.countries.add(m.key);
+          UI.toast(m.msg(gs.diseaseName), 'alert');
+          Game.awardDna(m.dna);
+          triggerNews('events');
+        }
+      }
+    }
+  }
+
+  function resetMilestones() {
+    _milestones.infected.clear();
+    _milestones.dead.clear();
+    _milestones.countries.clear();
+    _milestones.dna.clear();
+  }
 
   // ─── RANDOM EVENTS ────────────────────────────
   const WORLD_EVENTS = [
@@ -160,6 +236,62 @@ const Events = (() => {
       effect: { cureBoost: 8, duration: 0 },
       prob: 0.0006,
     },
+    {
+      id:   'genetic_drift',
+      msg:  '🧬 Spontaneous genetic drift — pathogen evolves favourable adaptation (+8 DNA)',
+      type: 'dna',
+      effect: { dnaBonus: 8, duration: 0 },
+      prob: 0.0012,
+    },
+    {
+      id:   'natural_disaster',
+      msg:  '🌊 Major natural disaster displaces millions — disease vectors spread rapidly',
+      type: 'alert',
+      effect: { infectivityBoost: 0.05, travelMult: 1.2, duration: 60 },
+      prob: 0.0007,
+    },
+    {
+      id:   'anti_vax_movement',
+      msg:  '📢 Anti-vaccine movement surges — cure research confidence drops',
+      type: 'warn',
+      effect: { cureResist: 0.10, duration: 70 },
+      prob: 0.001,
+    },
+    {
+      id:   'overcrowded_camps',
+      msg:  '🏕 Overcrowded refugee camps become disease hotspots — spread accelerates',
+      type: 'alert',
+      effect: { infectivityBoost: 0.06, duration: 50 },
+      prob: 0.001,
+    },
+    {
+      id:   'sewer_contamination',
+      msg:  '🚰 Water infrastructure failures — sewage contamination boosts waterborne spread',
+      type: 'alert',
+      effect: { infectivityBoost: 0.04, duration: 80 },
+      prob: 0.0009,
+    },
+    {
+      id:   'dna_windfall',
+      msg:  '⚡ Rapid viral replication detected — genetic windfall! (+15 DNA)',
+      type: 'dna',
+      effect: { dnaBonus: 15, duration: 0 },
+      prob: 0.0007,
+    },
+    {
+      id:   'international_cooperation',
+      msg:  '🤝 Unprecedented global cooperation — cure research significantly accelerated',
+      type: 'cure',
+      effect: { cureBoost: 12, duration: 0 },
+      prob: 0.0007,
+    },
+    {
+      id:   'failed_quarantine',
+      msg:  '😷 Quarantine zones breached — containment measures collapse in multiple cities',
+      type: 'alert',
+      effect: { infectivityBoost: 0.07, travelMult: 1.3, duration: 45 },
+      prob: 0.001,
+    },
   ];
 
   // ─── START TICKER ─────────────────────────────
@@ -240,6 +372,11 @@ const Events = (() => {
       return;
     }
 
+    if (ev.effect.dnaBonus) {
+      Game.awardDna(ev.effect.dnaBonus);
+      return;
+    }
+
     gs.activeEvents.push({
       id:        ev.id,
       effect:    ev.effect,
@@ -276,7 +413,8 @@ const Events = (() => {
     if (eventTimer) { clearInterval(eventTimer); eventTimer = null; }
     newsPool  = [];
     newsIndex = 0;
+    resetMilestones();
   }
 
-  return { startNewsTicker, triggerNews, onMonthTick, cleanup };
+  return { startNewsTicker, triggerNews, onMonthTick, onTick, cleanup };
 })();

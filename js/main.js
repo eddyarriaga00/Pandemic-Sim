@@ -173,12 +173,8 @@
     }
     if (gs.originIso) Map.setOrigin(gs.originIso);
     NewsPopup.reset();
-    if (_dayWatcher) { clearInterval(_dayWatcher); _dayWatcher = null; }
-    _dayWatcher = setInterval(() => {
-      const s = Game.getState();
-      NewsPopup.check(s.day);
-      Events.onTick(s);
-    }, 800);
+    Events.startNewsTicker();
+    startDayWatcher();
     Game.setPaused(false);
     Game.setSpeed(gs.speed || 1);
     const speedBtn = document.getElementById('btn-speed' + (gs.speed || 1));
@@ -633,6 +629,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       const gs = Game.getState();
       if (gs.phase !== 'spreading') return;
       NewsPopup.check(gs.day);
+      Events.onTick(gs);
     }, 3000);
   }
 
