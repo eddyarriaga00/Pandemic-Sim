@@ -166,10 +166,13 @@ const Game = (() => {
       if (state.day % 30 === 0) Events.onMonthTick();
     }
 
-    const diff = DIFFICULTIES[state.difficulty];
-    const td   = DISEASE_TYPES[state.diseaseType];
+    const diff  = DIFFICULTIES[state.difficulty];
+    const td    = DISEASE_TYPES[state.diseaseType];
+    const dnaMod             = td.dnaMod || 1.0;
+    const stealthCureTrigger = td.stealthy ? 0.22 : 0.10;
+    const cureMod            = td.cureMod  || 1.0;
 
-    let newInfected = 0, newDead = 0;
+    let newInfected = 0, newDead = 0, globalNewCases = 0;
 
     for (const iso in state.countries) {
       const c = state.countries[iso];
@@ -201,15 +204,11 @@ const Game = (() => {
       c.infected_pct = c.pop > 0 ? c.infected / c.pop : 0;
       c.dead_pct     = c.pop > 0 ? c.dead     / c.pop : 0;
 
-      newInfected += c.infected;
-      newDead     += c.dead;
-
-      // DNA accrual (scaled by disease DNA modifier)
-      const dnaMod = DISEASE_TYPES[state.diseaseType].dnaMod || 1.0;
-      if (newCases > 0) state.pendingDna += (newCases / 800000) * dnaMod;
+      newInfected    += c.infected;
+      newDead        += c.dead;
+      globalNewCases += newCases;
 
       // Cure trigger — stealthy diseases require higher severity to detect
-      const stealthCureTrigger = DISEASE_TYPES[state.diseaseType].stealthy ? 0.22 : 0.10;
       if (!state.cureActive && state.severity > stealthCureTrigger && c.infected > c.pop * 0.0003) {
         state.cureActive = true;
         toast('🔬 Governments begin cure research!', 'cure');
@@ -225,6 +224,12 @@ const Game = (() => {
     state.totalHealthy  = Math.max(0, state.totalPop - newInfected - newDead);
     state.peakInfected  = Math.max(state.peakInfected, newInfected);
     state.countriesInfected = Object.values(state.countries).filter(c => c.reached).length;
+
+    // ── DNA from infections — global, capped per tick to prevent runaway earnings
+    // Max 0.12 DNA/tick regardless of infection scale. At 3 ticks/day that's 0.36 DNA/day max.
+    if (globalNewCases > 0) {
+      state.pendingDna += Math.min(0.12, globalNewCases / 12000000) * dnaMod;
+    }
 
     // ── SPREAD TO NEW COUNTRIES ──
     if (tickCount % 2 === 0) spreadGlobal();
@@ -385,8 +390,8 @@ const Game = (() => {
     dst.infected = seed; dst.healthy = dst.pop - seed; dst.reached = true;
     state.countriesInfected++;
 
-    // DNA bonus scales with country population (bigger countries = more DNA)
-    const dnaBonusPop = dst.pop >= 100e6 ? 6 : dst.pop >= 50e6 ? 5 : dst.pop >= 10e6 ? 4 : 3;
+    // DNA bonus scales with country population size
+    const dnaBonusPop = dst.pop >= 100e6 ? 4 : dst.pop >= 20e6 ? 3 : dst.pop >= 5e6 ? 2 : 1;
     toast(`🌍 ${state.diseaseName} spreads to ${dst.name} via ${method}`, 'info');
     if (typeof AudioEngine !== 'undefined') AudioEngine.sfxNewCountry();
     Events.triggerNews('spreading');
@@ -437,8 +442,7 @@ const Game = (() => {
     rate *= diff.cureSpeed;
 
     // Disease-specific cure modifier (prions hard to cure, nano-virus easy)
-    const cureMod = DISEASE_TYPES[state.diseaseType].cureMod || 1.0;
-    rate *= cureMod;
+    rate *= DISEASE_TYPES[state.diseaseType].cureMod || 1.0;
 
     // Resistance
     const resist = Math.min(0.88, state.cureResist + state.eventBoosts.cureResist);

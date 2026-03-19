@@ -126,10 +126,10 @@ const Events = (() => {
     if (totalCountries > 0) {
       const infectedPct = gs.countriesInfected / totalCountries;
       const countryMilestones = [
-        { pct: 0.25, key: 25,  dna: 5,  msg: (n) => `🌐 ${n} now in 25% of the world's nations` },
-        { pct: 0.50, key: 50,  dna: 10, msg: (n) => `🌐 ${n} detected in half the world — containment failing` },
-        { pct: 0.75, key: 75,  dna: 15, msg: (n) => `🌐 ${n} in 75% of nations — is anything left to stop it?` },
-        { pct: 1.00, key: 100, dna: 25, msg: (n) => `🌐 ${n} has reached EVERY NATION ON EARTH` },
+        { pct: 0.25, key: 25,  dna: 3,  msg: (n) => `🌐 ${n} now in 25% of the world's nations` },
+        { pct: 0.50, key: 50,  dna: 6,  msg: (n) => `🌐 ${n} detected in half the world — containment failing` },
+        { pct: 0.75, key: 75,  dna: 10, msg: (n) => `🌐 ${n} in 75% of nations — is anything left to stop it?` },
+        { pct: 1.00, key: 100, dna: 15, msg: (n) => `🌐 ${n} has reached EVERY NATION ON EARTH` },
       ];
       for (const m of countryMilestones) {
         if (!_milestones.countries.has(m.key) && infectedPct >= m.pct) {
@@ -238,9 +238,9 @@ const Events = (() => {
     },
     {
       id:   'genetic_drift',
-      msg:  '🧬 Spontaneous genetic drift — pathogen evolves favourable adaptation (+8 DNA)',
+      msg:  '🧬 Spontaneous genetic drift — pathogen evolves favourable adaptation (+4 DNA)',
       type: 'dna',
-      effect: { dnaBonus: 8, duration: 0 },
+      effect: { dnaBonus: 4, duration: 0 },
       prob: 0.0012,
     },
     {
@@ -273,9 +273,9 @@ const Events = (() => {
     },
     {
       id:   'dna_windfall',
-      msg:  '⚡ Rapid viral replication detected — genetic windfall! (+15 DNA)',
+      msg:  '⚡ Rapid viral replication detected — genetic windfall! (+6 DNA)',
       type: 'dna',
-      effect: { dnaBonus: 15, duration: 0 },
+      effect: { dnaBonus: 6, duration: 0 },
       prob: 0.0007,
     },
     {
