@@ -1754,3 +1754,128 @@ html, body {
 .nc-timer-fill {
   height: 100%; background: var(--red); width: 100%;
 }
+
+/* ═══ TOP INFECTED PANEL ════════════════════════ */
+.top-countries-panel {
+  position: absolute;
+  left: 10px;
+  bottom: 60px;   /* above news bar */
+  z-index: 35;
+  background: rgba(8,11,16,0.88);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 170px;
+  max-width: 200px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.tc-header {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--tx-3);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--bdr);
+  padding-bottom: 4px;
+}
+.top-country-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.top-country-row:last-child { margin-bottom: 0; }
+.tc-name {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--tx-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-stats {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+}
+.tc-inf  { color: var(--amber); }
+.tc-dead { color: var(--red); opacity: 0.8; }
+.tc-bar-wrap {
+  height: 3px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.tc-bar-inf {
+  height: 100%;
+  background: var(--red);
+  border-radius: 2px;
+  transition: width 0.8s ease;
+  min-width: 2px;
+}
+
+/* ═══ COUNTRY PANEL RATE DISPLAY ════════════════ */
+.cp-val-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.cp-rate {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  color: rgba(227,179,65,0.6);
+  white-space: nowrap;
+  min-height: 0.5rem;
+}
+.red-rate { color: rgba(248,81,73,0.6); }
+
+/* ═══ CURE BAR CRITICAL PULSE ═══════════════════ */
+.cure-bar.cure-critical {
+  animation: cureCritical 0.6s ease-in-out infinite alternate;
+}
+@keyframes cureCritical {
+  from { box-shadow: 0 0 12px rgba(255,0,0,0.9), 0 0 24px rgba(255,0,0,0.3); }
+  to   { box-shadow: 0 0 20px rgba(255,0,0,1),   0 0 40px rgba(255,0,0,0.5); }
+}
+
+/* ═══ MILESTONE SCREEN FLASH ════════════════════ */
+#flash-overlay {
+  pointer-events: none;
+  z-index: 200;
+}
+
+/* ═══ TOAST IMPROVEMENTS ════════════════════════ */
+/* Alert toasts get a left red stripe for high urgency */
+.toast-alert {
+  border-left: 3px solid var(--red) !important;
+}
+.toast-cure {
+  border-left: 3px solid var(--blue) !important;
+}
+.toast-dna {
+  border-left: 3px solid var(--green) !important;
+}
+.toast-warn {
+  border-left: 3px solid var(--amber) !important;
+}
+
+/* ═══ MAP PULSE ANIMATION ═══════════════════════ */
+/* Newly infected country color pulse is done in map.js via D3 transitions */
+/* Extra glow on country paths that are heavily infected */
+.country-path.selected {
+  stroke: var(--blue) !important;
+  stroke-width: 1.5px !important;
+}
+
+/* ═══ DNA DISPLAY PULSE WHEN AFFORDABLE ═════════ */
+#evo-available-dot:not(.hidden) {
+  animation: evoDotPulse 0.9s ease-in-out infinite;
+}
+@keyframes evoDotPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.7); }
+}

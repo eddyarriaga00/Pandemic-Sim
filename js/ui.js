@@ -136,6 +136,30 @@ const UI = (() => {
     setTimeout(() => popup.remove(), 1300);
   }
 
+  // ─── SCREEN FLASH ─────────────────────────────
+  // Brief color overlay on milestone events — high drama, low cost
+  let _flashTimeout = null;
+  function flashScreen(color) {
+    const overlay = document.getElementById('flash-overlay');
+    if (!overlay) return;
+    if (_flashTimeout) { clearTimeout(_flashTimeout); overlay.style.opacity = '0'; }
+    const colours = {
+      red:    'rgba(248,81,73,0.18)',
+      amber:  'rgba(227,179,65,0.18)',
+      green:  'rgba(63,185,80,0.18)',
+    };
+    overlay.style.background = colours[color] || colours.red;
+    overlay.style.opacity    = '1';
+    overlay.style.transition = 'opacity 0s';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.style.transition = 'opacity 0.7s ease-out';
+        overlay.style.opacity    = '0';
+      });
+    });
+    _flashTimeout = setTimeout(() => { _flashTimeout = null; }, 800);
+  }
+
   // ─── TOAST NOTIFICATIONS ──────────────────────
   const toastQueue = [];
   let toastBusy = false;
@@ -217,6 +241,9 @@ const UI = (() => {
     panel.classList.remove('hidden');
   }
 
+  // Track per-country previous snapshot for rate display
+  const _cpPrev = {};
+
   function _refreshCpLive(country) {
     const totalAlive = country.pop - country.dead;
     const infPct     = totalAlive > 0 ? (country.infected / totalAlive) * 100 : 0;
@@ -226,6 +253,19 @@ const UI = (() => {
     el('cp-infected', fmt(country.infected));
     el('cp-dead',     fmt(country.dead));
     el('cp-healthy',  fmt(Math.max(0, country.healthy)));
+
+    // Rate display (delta since last refresh)
+    const prev = _cpPrev[country.iso];
+    if (prev) {
+      const dInf  = country.infected - prev.infected;
+      const dDead = country.dead - prev.dead;
+      const rateEl = document.getElementById('cp-inf-rate');
+      const dRateEl = document.getElementById('cp-dead-rate');
+      if (rateEl)  rateEl.textContent  = dInf  > 0 ? `+${fmt(dInf)}/tick`  : '';
+      if (dRateEl) dRateEl.textContent = dDead > 0 ? `+${fmt(dDead)}/tick` : '';
+    }
+    _cpPrev[country.iso] = { infected: country.infected, dead: country.dead };
+
     const airportStr = country.airports > 0
       ? country.airports + (country.airportClosed ? ' (CLOSED ✈)' : ' (OPEN)')
       : 'None';
@@ -437,6 +477,31 @@ const UI = (() => {
     if (node) node.style.width = pctVal + '%';
   }
 
+  // ─── TOP INFECTED COUNTRIES ───────────────────
+  let _topCountriesFrames = 0;
+  function updateTopCountries() {
+    const panel = document.getElementById('top-countries-list');
+    if (!panel) return;
+    const gs = Game.getState();
+    if (gs.phase !== 'spreading') return;
+
+    const sorted = Game.getAllCountries()
+      .filter(c => c.reached && c.infected > 0)
+      .sort((a, b) => (b.infected + b.dead) - (a.infected + a.dead))
+      .slice(0, 5);
+
+    panel.innerHTML = sorted.map(c => {
+      const infPct = (c.infected / c.pop * 100).toFixed(1);
+      const dead   = c.dead > 0 ? ` ☠${fmt(c.dead)}` : '';
+      const lockIcon = c.lockdown ? ' 🔒' : c.airportClosed ? ' ✈' : '';
+      return `<div class="top-country-row">
+        <span class="tc-name">${c.name}${lockIcon}</span>
+        <span class="tc-stats"><span class="tc-inf">${fmt(c.infected)}</span><span class="tc-dead">${dead}</span></span>
+        <div class="tc-bar-wrap"><div class="tc-bar-inf" style="width:${Math.min(100, infPct)}%"></div></div>
+      </div>`;
+    }).join('');
+  }
+
   // ─── SMOOTH RENDER LOOP ───────────────────────
   let _raf  = null;
   let _disp = { dead: 0, infected: 0, healthy: 0, cure: 0 };
@@ -533,6 +598,20 @@ const UI = (() => {
         }
 
         // Pause menu handled by PauseMenu module
+
+        // Top infected countries panel (every ~60 frames)
+        _topCountriesFrames = (_topCountriesFrames + 1) % 60;
+        if (_topCountriesFrames === 0) updateTopCountries();
+
+        // Cure bar urgency pulse when >80%
+        const cureBarEl = document.getElementById('cure-bar');
+        if (cureBarEl) {
+          if (_disp.cure > 80) {
+            cureBarEl.classList.add('cure-critical');
+          } else {
+            cureBarEl.classList.remove('cure-critical');
+          }
+        }
       }
 
       // Live country panel — refresh every frame while open
@@ -557,5 +636,6 @@ const UI = (() => {
     showCountryPanel, hideCountryPanel, setNewsText,
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
+    flashScreen, updateTopCountries,
   };
 })();

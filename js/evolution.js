@@ -66,13 +66,18 @@ const Evolution = (() => {
       const card = document.createElement('div');
       card.className = `trait-card${owned ? ' owned' : ''}${locked ? ' locked' : ''}`;
 
-      // Build effects preview string
+      // Build effects preview string (handle negative values cleanly)
       const effArr = [];
       const e = trait.effects || {};
-      if (e.infectivity) effArr.push(`+${(e.infectivity*100).toFixed(0)}% inf`);
-      if (e.severity)    effArr.push(`+${(e.severity*100).toFixed(0)}% sev`);
-      if (e.lethality)   effArr.push(`+${(e.lethality*100).toFixed(0)}% leth`);
-      if (e.cureResist)  effArr.push(`+${(e.cureResist*100).toFixed(0)}% resist`);
+      const fmtEff = (v, label) => {
+        if (!v) return null;
+        const sign = v > 0 ? '+' : '';
+        return `${sign}${(v * 100).toFixed(0)}% ${label}`;
+      };
+      if (e.infectivity != null && e.infectivity !== 0) effArr.push(fmtEff(e.infectivity, 'inf'));
+      if (e.severity    != null && e.severity    !== 0) effArr.push(fmtEff(e.severity,    'sev'));
+      if (e.lethality   != null && e.lethality   !== 0) effArr.push(fmtEff(e.lethality,   'leth'));
+      if (e.cureResist  != null && e.cureResist  !== 0) effArr.push(fmtEff(e.cureResist,  'resist'));
 
       card.innerHTML = `
         <span class="trait-icon">${trait.icon}</span>

@@ -64,11 +64,56 @@ const Game = (() => {
   let tickCount = 0;
   let _history = []; // daily snapshots for epidemic curve
 
+  // ─── COUNTRY CACHES (perf) ────────────────────
+  // Avoid repeated filter()/reduce() inside the hot spreadGlobal() path
+  let _uninfectedAirCache  = null; // countries with airports, not yet reached
+  let _uninfectedPortCache = null; // countries with ports, not yet reached
+  let _uninfectedAllCache  = null; // all uninfected countries
+  let _infectedCache       = null; // all reached countries (for fungus src pick)
+  let _dirtyIsos = new Set();      // countries whose color changed this tick
+
+  function _invalidateCountryCache() {
+    _uninfectedAirCache  = null;
+    _uninfectedPortCache = null;
+    _uninfectedAllCache  = null;
+    _infectedCache       = null;
+  }
+
+  function _getUninfectedAir() {
+    if (!_uninfectedAirCache) {
+      _uninfectedAirCache = Object.values(state.countries)
+        .filter(c => !c.reached && c.airports > 0 && !c.airportClosed);
+    }
+    return _uninfectedAirCache;
+  }
+  function _getUninfectedPort() {
+    if (!_uninfectedPortCache) {
+      _uninfectedPortCache = Object.values(state.countries)
+        .filter(c => !c.reached && c.ports > 0);
+    }
+    return _uninfectedPortCache;
+  }
+  function _getUninfectedAll() {
+    if (!_uninfectedAllCache) {
+      _uninfectedAllCache = Object.values(state.countries).filter(c => !c.reached);
+    }
+    return _uninfectedAllCache;
+  }
+  function _getInfected() {
+    if (!_infectedCache) {
+      _infectedCache = Object.values(state.countries).filter(c => c.reached);
+    }
+    return _infectedCache;
+  }
+
   // ─── INIT ─────────────────────────────────────
   function init(config) {
     state.diseaseName = config.name       || 'Unnamed';
     state.diseaseType = config.type       || 'bacteria';
     state.difficulty  = config.difficulty || 'normal';
+
+    _invalidateCountryCache();
+    _dirtyIsos.clear();
 
     if (state.tickInterval) { clearInterval(state.tickInterval); state.tickInterval = null; }
 
@@ -174,9 +219,12 @@ const Game = (() => {
 
     const diff  = DIFFICULTIES[state.difficulty];
     const td    = DISEASE_TYPES[state.diseaseType];
-    const dnaMod             = td.dnaMod || 1.0;
-    const stealthCureTrigger = td.stealthy ? 0.22 : 0.10;
-    const cureMod            = td.cureMod  || 1.0;
+    const dnaMod  = (td.dnaMod || 1.0) * (state.traits.has('dna_replication') ? 1.3 : 1);
+    // Symbiosis raises the detection threshold — harder to trigger cure research
+    const stealthCureTrigger = td.stealthy
+      ? (state.traits.has('symbiosis') ? 0.32 : 0.22)
+      : (state.traits.has('symbiosis') ? 0.16 : 0.10);
+    const cureMod  = td.cureMod  || 1.0;
 
     let newInfected = 0, newDead = 0, globalNewCases = 0;
 
@@ -209,6 +257,8 @@ const Game = (() => {
 
       c.infected_pct = c.pop > 0 ? c.infected / c.pop : 0;
       c.dead_pct     = c.pop > 0 ? c.dead     / c.pop : 0;
+
+      if (newCases > 0 || actualDeaths > 0) _dirtyIsos.add(iso);
 
       newInfected    += c.infected;
       newDead        += c.dead;
@@ -258,12 +308,16 @@ const Game = (() => {
 
     // ── EVENTS ──
     tickEvents();
+    Events.onTick(state);
 
     // ── CHECK WIN/LOSE ──
     checkEndConditions();
 
     // ── UI (map colors every 2 ticks, evo check every 4) ──
-    if (tickCount % 2 === 0 && Map && Map.updateColors) Map.updateColors();
+    if (tickCount % 2 === 0 && Map && Map.updateColors) {
+      Map.updateColors(_dirtyIsos);
+      _dirtyIsos = new Set();
+    }
     if (tickCount % 4 === 0) UI.checkEvoAvailable();
   }
 
@@ -271,20 +325,23 @@ const Game = (() => {
   function calcInfRate(c) {
     let inf = state.infectivity + state.eventBoosts.infectivity;
 
-    // Climate resistance checks
-    const coldLv = state.traits.has('cold_resist2') ? 2 : state.traits.has('cold_resist1') ? 1 : 0;
-    const heatLv = state.traits.has('heat_resist2') ? 2 : state.traits.has('heat_resist1') ? 1 : 0;
+    // Extremophile ignores ALL climate penalties/bonuses
+    if (!state.traits.has('extremophile')) {
+      // Climate resistance checks
+      const coldLv = state.traits.has('cold_resist2') ? 2 : state.traits.has('cold_resist1') ? 1 : 0;
+      const heatLv = state.traits.has('heat_resist2') ? 2 : state.traits.has('heat_resist1') ? 1 : 0;
 
-    if (c.climate === 'cold') {
-      if      (coldLv === 2) inf *= 1.35;
-      else if (coldLv === 1) inf *= 0.85;
-      else                   inf *= 0.30;  // very hard without resistance
-    } else if (c.climate === 'arid') {
-      if      (heatLv === 2) inf *= 1.30;
-      else if (heatLv === 1) inf *= 0.80;
-      else                   inf *= 0.38;
-    } else if (c.climate === 'tropical') {
-      inf *= heatLv > 0 ? 1.15 : 0.88;
+      if (c.climate === 'cold') {
+        if      (coldLv === 2) inf *= 1.35;
+        else if (coldLv === 1) inf *= 0.85;
+        else                   inf *= 0.30;
+      } else if (c.climate === 'arid') {
+        if      (heatLv === 2) inf *= 1.30;
+        else if (heatLv === 1) inf *= 0.80;
+        else                   inf *= 0.38;
+      } else if (c.climate === 'tropical') {
+        inf *= heatLv > 0 ? 1.15 : 0.88;
+      }
     }
 
     // Wealth
@@ -294,6 +351,9 @@ const Game = (() => {
 
     // Urban trait bonus for dense countries
     if (state.traits.has('urban_survival') && c.pop > 80000000) inf *= 1.12;
+
+    // Biofilm — surface contamination bonus
+    if (state.traits.has('biofilm')) inf *= 1.08;
 
     // Government airport/border closures reduce internal spread (quarantine)
     if (c.airportClosed) inf *= 0.88;
@@ -348,7 +408,8 @@ const Game = (() => {
 
   // ─── GLOBAL SPREAD ────────────────────────────
   function spreadGlobal() {
-    const travelMult = state.eventBoosts.travelMult * (state.airportsOpen ? 1 : 0.4);
+    const travelBonus = state.traits.has('travel_adaptation') ? 1.35 : 1;
+    const travelMult = state.eventBoosts.travelMult * (state.airportsOpen ? 1 : 0.4) * travelBonus;
 
     for (const iso in state.countries) {
       const src = state.countries[iso];
@@ -388,7 +449,7 @@ const Game = (() => {
     // Fungus spore burst (random long-range jump)
     if (DISEASE_TYPES[state.diseaseType].sporeBurst && Math.random() < 0.006 * state.speed) {
       const dst = pickUninfected();
-      const infectedArr = Object.values(state.countries).filter(c => c.reached);
+      const infectedArr = _getInfected();
       const sporeSrc = infectedArr.length ? infectedArr[Math.floor(Math.random() * infectedArr.length)] : null;
       if (dst) { infectNewCountry(dst, 'spore dispersal', sporeSrc?.iso); }
     }
@@ -398,6 +459,8 @@ const Game = (() => {
     const seed = Math.max(8, Math.floor(dst.pop * 0.0000007));
     dst.infected = seed; dst.healthy = dst.pop - seed; dst.reached = true;
     state.countriesInfected++;
+    _invalidateCountryCache(); // newly infected country changes all cached lists
+    _dirtyIsos.add(dst.iso);
 
     // DNA bonus scales with country population size
     const dnaBonusPop = dst.pop >= 100e6 ? 4 : dst.pop >= 20e6 ? 3 : dst.pop >= 5e6 ? 2 : 1;
@@ -410,23 +473,24 @@ const Game = (() => {
   }
 
   function pickUninfected() {
-    const arr = Object.values(state.countries).filter(c => !c.reached);
+    const arr = _getUninfectedAll();
     return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
   }
   function pickUninfectedWithAirports() {
-    const arr = Object.values(state.countries).filter(c => !c.reached && c.airports > 0 && !c.airportClosed);
+    const arr = _getUninfectedAir();
     if (!arr.length) return null;
-    // Weight by airport count — major hubs are more likely destinations
-    const totalWeight = arr.reduce((s, c) => s + c.airports * c.airports, 0);
+    // Weight by airport count — major hubs more likely (cached totalWeight)
+    let totalWeight = 0;
+    for (const c of arr) totalWeight += c.airports * c.airports;
     let r = Math.random() * totalWeight;
     for (const c of arr) { r -= c.airports * c.airports; if (r <= 0) return c; }
     return arr[arr.length - 1];
   }
   function pickUninfectedWithPorts() {
-    const arr = Object.values(state.countries).filter(c => !c.reached && c.ports > 0);
+    const arr = _getUninfectedPort();
     if (!arr.length) return null;
-    // Weight by port count
-    const totalWeight = arr.reduce((s, c) => s + c.ports, 0);
+    let totalWeight = 0;
+    for (const c of arr) totalWeight += c.ports;
     let r = Math.random() * totalWeight;
     for (const c of arr) { r -= c.ports; if (r <= 0) return c; }
     return arr[arr.length - 1];
@@ -631,10 +695,14 @@ const Game = (() => {
 
   function applyEffects(trait, mult) {
     const e = trait.effects || {};
-    if (e.infectivity) state.infectivity = Math.min(0.95, state.infectivity + e.infectivity * mult);
-    if (e.severity)    state.severity    = Math.min(1.00, state.severity    + e.severity    * mult);
-    if (e.lethality)   state.lethality   = Math.min(1.00, state.lethality   + e.lethality   * mult);
-    if (e.cureResist)  state.cureResist  = Math.min(0.90, state.cureResist  + e.cureResist  * mult);
+    if (e.infectivity != null && e.infectivity !== 0)
+      state.infectivity = Math.max(0, Math.min(0.95, state.infectivity + e.infectivity * mult));
+    if (e.severity    != null && e.severity    !== 0)
+      state.severity    = Math.max(0, Math.min(1.00, state.severity    + e.severity    * mult));
+    if (e.lethality   != null && e.lethality   !== 0)
+      state.lethality   = Math.max(0, Math.min(1.00, state.lethality   + e.lethality   * mult));
+    if (e.cureResist  != null && e.cureResist  !== 0)
+      state.cureResist  = Math.max(0, Math.min(0.90, state.cureResist  + e.cureResist  * mult));
   }
 
   function reverseEffects(trait) {

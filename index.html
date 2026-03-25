@@ -334,6 +334,15 @@
       </div>
     </div>
 
+    <!-- FLASH OVERLAY (milestone events) -->
+    <div id="flash-overlay" style="position:absolute;inset:0;pointer-events:none;z-index:200;opacity:0;"></div>
+
+    <!-- TOP INFECTED COUNTRIES -->
+    <div class="top-countries-panel" id="top-countries-panel">
+      <div class="tc-header">TOP INFECTED</div>
+      <div id="top-countries-list"></div>
+    </div>
+
     <!-- COUNTRY INFO PANEL -->
     <div id="country-panel" class="country-panel hidden">
       <div class="cp-header">
@@ -345,12 +354,12 @@
         <div class="cp-bar-row">
           <span>Infected</span>
           <div class="cp-bar"><div class="cp-fill orange-fill" id="cp-bar-inf"></div></div>
-          <span id="cp-infected" class="orange">0</span>
+          <span class="cp-val-col"><span id="cp-infected" class="orange">0</span><span id="cp-inf-rate" class="cp-rate"></span></span>
         </div>
         <div class="cp-bar-row">
           <span>Dead</span>
           <div class="cp-bar"><div class="cp-fill red-fill" id="cp-bar-dead"></div></div>
-          <span id="cp-dead" class="red">0</span>
+          <span class="cp-val-col"><span id="cp-dead" class="red">0</span><span id="cp-dead-rate" class="cp-rate red-rate"></span></span>
         </div>
         <div class="cp-bar-row">
           <span>Healthy</span>

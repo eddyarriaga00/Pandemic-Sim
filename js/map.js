@@ -306,23 +306,32 @@ const Map = (() => {
   }
 
   // ─── UPDATE COLORS ────────────────────────────
+  // _prevColors: iso → last color string applied, avoids redundant D3 calls
+  const _prevColors  = {};
+  const _prevFilters = {};
   let _colorUpdateCount = 0;
-  function updateColors() {
+
+  function updateColors(dirtyIsos) {
     if (!mapInitialized) return;
     _colorUpdateCount++;
 
-    const countries = Game.getAllCountries();
+    // Only process countries that changed this tick (or all on first run)
+    const countries = dirtyIsos && dirtyIsos.size > 0
+      ? [...dirtyIsos].map(iso => Game.getCountry(iso)).filter(Boolean)
+      : Game.getAllCountries();
+
     for (const c of countries) {
       const el = pathsByIso[c.iso];
       if (!el || el.empty()) continue;
 
       const color   = colorFor(c);
-      const deadPct = c.dead    / c.pop;
+      const deadPct = c.dead / c.pop;
       const infPct  = (c.infected + c.dead) / c.pop;
+      const filter  = (deadPct > 0.12 || infPct > 0.35) ? 'url(#inf-glow)' : null;
 
-      el.attr('fill', color);
-      // Apply glow to heavily infected/dead countries
-      el.attr('filter', (deadPct > 0.12 || infPct > 0.35) ? 'url(#inf-glow)' : null);
+      // Skip DOM write if nothing changed
+      if (_prevColors[c.iso] !== color)  { el.attr('fill', color);   _prevColors[c.iso]  = color; }
+      if (_prevFilters[c.iso] !== filter) { el.attr('filter', filter); _prevFilters[c.iso] = filter; }
     }
 
     // Update infection intensity dots every 3 color refreshes

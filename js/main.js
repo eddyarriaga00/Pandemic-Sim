@@ -629,7 +629,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       const gs = Game.getState();
       if (gs.phase !== 'spreading') return;
       NewsPopup.check(gs.day);
-      Events.onTick(gs);
+      // Events.onTick is now called directly from Game.tick() every game tick
     }, 3000);
   }
 
