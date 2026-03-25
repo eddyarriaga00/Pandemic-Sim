@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>PATHOGEN — Global Pandemic Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- MAP LOADING OVERLAY -->
+  <div id="map-loader" class="map-loader hidden">
+    <div class="loader-inner">
+      <div class="loader-biohazard">☣</div>
+      <div class="loader-text">LOADING WORLD DATA...</div>
+      <div class="loader-bar"><div class="loader-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ═══════════════════════════════════════ SPLASH -->
+  <div id="screen-splash" class="screen active">
+    <div class="splash-bg"></div>
+    <div class="biohazard-bg">☣</div>
+    <canvas id="splash-canvas" class="splash-canvas"></canvas>
+    <div class="splash-content">
+      <h1 class="game-title">PATHOGEN</h1>
+      <p class="game-subtitle">GLOBAL PANDEMIC SIMULATOR</p>
+      <div class="splash-pills">
+        <div class="stat-pill">8.1B lives at stake</div>
+        <div class="stat-pill" id="pill-version">v2.0</div>
+      </div>
+      <button class="btn-primary pulse-btn" id="btn-start">☣ INITIATE OUTBREAK</button>
+      <button class="btn-secondary btn-load-save hidden" id="btn-load-save">💾 CONTINUE SAVED GAME</button>
+      <div class="splash-secondary-btns">
+        <button class="btn-secondary" id="btn-how-to-play">HOW TO PLAY</button>
+        <button class="btn-secondary" id="btn-settings">⚙ SETTINGS</button>
+      </div>
+    </div>
+    <div class="splash-ticker-bar">
+      <span class="ticker-label">BREAKING</span>
+      <div class="splash-ticker-scroll">
+        <span>WHO reports no unusual disease activity globally &nbsp;•&nbsp; Scientists continue monitoring zoonotic spillovers &nbsp;•&nbsp; Flu season considered mild this year &nbsp;•&nbsp; International health summit concludes with no major findings &nbsp;•&nbsp; WHO reports no unusual disease activity globally &nbsp;•&nbsp; Scientists continue monitoring zoonotic spillovers &nbsp;•&nbsp;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ HOW TO PLAY -->
+  <div id="modal-howto" class="modal hidden">
+    <div class="modal-content howto-modal">
+      <h2>⚠ HOW TO PLAY</h2>
+      <div class="howto-grid">
+        <div class="howto-section">
+          <h3>☣ OBJECTIVE</h3>
+          <p>Evolve your pathogen to infect and kill all 8 billion humans before a cure is developed. Stay hidden, spread globally, then strike.</p>
+        </div>
+        <div class="howto-section">
+          <h3>⚡ DNA POINTS</h3>
+          <p>Earn DNA as your disease spreads. Spend it in EVOLVE to unlock new traits. Devolve traits for a 50% refund.</p>
+        </div>
+        <div class="howto-section">
+          <h3>🧬 EVOLUTION STRATEGY</h3>
+          <p><strong style="color:#ff8c00">1.</strong> Start with Transmissions to spread fast.<br>
+             <strong style="color:#ff8c00">2.</strong> Keep symptoms LOW until fully global.<br>
+             <strong style="color:#ff8c00">3.</strong> Then pile on lethality symptoms to kill.</p>
+        </div>
+        <div class="howto-section">
+          <h3>🌡 CLIMATE MATTERS</h3>
+          <p>Cold resistance to reach Russia &amp; Canada. Heat resistance for the Middle East &amp; Africa. Without it, spread is severely limited.</p>
+        </div>
+        <div class="howto-section">
+          <h3>🔬 CURE WARNING</h3>
+          <p>High severity triggers cure research. Rich countries fund it faster. Buy Drug Resistance and Genetic Hardening to slow it down.</p>
+        </div>
+        <div class="howto-section">
+          <h3>🗺 MAP</h3>
+          <p>Dark green = healthy • Yellow-orange = infected • Red = heavy • Dark grey = mass death. Tap countries for details.</p>
+        </div>
+      </div>
+      <button class="btn-primary" id="btn-close-howto">✓ UNDERSTOOD</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ SETTINGS MODAL -->
+  <div id="modal-settings" class="modal hidden">
+    <div class="modal-content settings-modal">
+      <h2>⚙ SETTINGS</h2>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🎵 AUDIO</div>
+        <div class="settings-row">
+          <span class="settings-label">Music Volume</span>
+          <div class="settings-control">
+            <input type="range" id="set-music-vol" class="pm-slider" min="0" max="100" value="55">
+            <span class="settings-val" id="set-music-val">55</span>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">SFX Volume</span>
+          <div class="settings-control">
+            <input type="range" id="set-sfx-vol" class="pm-slider" min="0" max="100" value="90">
+            <span class="settings-val" id="set-sfx-val">90</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🖥 DISPLAY</div>
+        <div class="settings-row">
+          <span class="settings-label">Reduced Motion</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-reduced-motion">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label">Show Tooltips</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-show-tooltips" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">ℹ ABOUT</div>
+        <div class="settings-about">
+          <span class="settings-about-line">PATHOGEN v2.0 — Global Pandemic Simulator</span>
+          <span class="settings-about-line">Inspired by Plague Inc. &amp; Pandemic games</span>
+          <span class="settings-about-line" id="set-version-line">All simulation parameters are fictional.</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-close-settings">✓ SAVE &amp; CLOSE</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ STORY -->
+  <div id="screen-story" class="screen">
+    <div class="story-wrap">
+      <div class="story-header">
+        <span class="classified-stamp">⚠ CLASSIFIED</span>
+        <span class="story-clearance">EYES ONLY — SECTOR SEVEN CLEARANCE</span>
+      </div>
+      <div class="story-body" id="story-body"></div>
+      <div class="story-actions">
+        <button class="btn-primary" id="btn-story-continue">ACCESS GRANTED — CONTINUE ›</button>
+        <button class="btn-back" id="btn-story-skip">skip intro</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ SETUP -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-content">
+      <h2 class="setup-title">☣ CREATE PATHOGEN</h2>
+
+      <div class="form-group">
+        <label>PATHOGEN NAME</label>
+        <input type="text" id="disease-name" maxlength="20"
+               placeholder="e.g. Black Tide..." autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="form-group">
+        <label>PATHOGEN TYPE</label>
+        <div class="type-grid">
+          <div class="type-card selected" data-type="bacteria">
+            <span class="type-icon">🦠</span>
+            <span class="type-name">BACTERIA</span>
+            <span class="type-desc">Balanced. Best for beginners. Full evolution tree available.</span>
+          </div>
+          <div class="type-card" data-type="virus">
+            <span class="type-icon">🔴</span>
+            <span class="type-name">VIRUS</span>
+            <span class="type-desc">Random mutations. Faster spread, harder to control.</span>
+          </div>
+          <div class="type-card" data-type="fungus">
+            <span class="type-icon">🍄</span>
+            <span class="type-name">FUNGUS</span>
+            <span class="type-desc">Spore bursts reach new regions. Struggles with travel routes.</span>
+          </div>
+          <div class="type-card" data-type="parasite">
+            <span class="type-icon">🐛</span>
+            <span class="type-name">PARASITE</span>
+            <span class="type-desc">Stays hidden longer. Reduced cure research awareness.</span>
+          </div>
+          <div class="type-card" data-type="prion">
+            <span class="type-icon">🧠</span>
+            <span class="type-name">PRION</span>
+            <span class="type-desc">Nearly invisible. Extremely slow but hard to cure.</span>
+          </div>
+          <div class="type-card" data-type="nano-virus">
+            <span class="type-icon">⚙️</span>
+            <span class="type-name">NANO-VIRUS</span>
+            <span class="type-desc">Instant detection. Cure starts immediately. Very fast spread.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>DIFFICULTY</label>
+        <div class="difficulty-row">
+          <button class="diff-btn" data-diff="casual">CASUAL</button>
+          <button class="diff-btn selected" data-diff="normal">NORMAL</button>
+          <button class="diff-btn" data-diff="brutal">BRUTAL</button>
+          <button class="diff-btn" data-diff="mega-brutal">MEGA BRUTAL</button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-begin-game">BEGIN INFECTION →</button>
+      <button class="btn-back" id="btn-back-setup">← BACK</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ MAIN GAME -->
+  <div id="screen-game" class="screen">
+
+    <!-- TOP HUD -->
+    <div class="hud-top">
+      <div class="hud-stat dead-stat">
+        <span class="hud-icon">☠</span>
+        <div class="hud-values">
+          <span class="hud-label">DEAD</span>
+          <span class="hud-number" id="hud-dead">0</span>
+        </div>
+      </div>
+      <div class="hud-stat infected-stat">
+        <span class="hud-icon">🦠</span>
+        <div class="hud-values">
+          <span class="hud-label">INFECTED</span>
+          <span class="hud-number" id="hud-infected">0</span>
+        </div>
+      </div>
+      <div class="hud-stat healthy-stat">
+        <span class="hud-icon">👤</span>
+        <div class="hud-values">
+          <span class="hud-label">HEALTHY</span>
+          <span class="hud-number" id="hud-healthy">8.1B</span>
+        </div>
+      </div>
+      <div class="hud-stat cure-stat">
+        <span class="hud-icon">🔬</span>
+        <div class="hud-values">
+          <span class="hud-label">CURE</span>
+          <span class="hud-number" id="hud-cure">0%</span>
+        </div>
+      </div>
+      <button class="music-btn" id="btn-music" title="Toggle music">♪</button>
+    </div>
+
+    <!-- CURE PROGRESS BAR -->
+    <div class="cure-bar-container">
+      <div class="cure-bar" id="cure-bar"></div>
+      <div class="cure-label" id="cure-label"></div>
+    </div>
+    <!-- THREAT LEVEL METER -->
+    <div class="threat-bar-container" id="threat-bar-container">
+      <div class="threat-label">THREAT</div>
+      <div class="threat-track"><div class="threat-fill" id="threat-fill"></div></div>
+      <span class="threat-pct" id="threat-pct">0%</span>
+    </div>
+
+    <!-- WORLD MAP (D3 renders here) -->
+    <div id="map-container">
+      <div class="map-scanlines"></div>
+      <div class="map-vignette"></div>
+      <svg id="world-map"></svg>
+    </div>
+
+    <!-- INFECTION SPREAD PARTICLES (canvas overlay) -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- PAUSE MENU -->
+    <div id="pause-menu" class="pause-menu hidden">
+      <div class="pm-card" id="pm-card">
+        <div class="pm-scanlines"></div>
+        <div class="pm-header">
+          <div class="pm-paused-label">⏸ PAUSED</div>
+          <div class="pm-disease-name" id="pm-disease-name">PATHOGEN</div>
+          <div class="pm-disease-type" id="pm-disease-type">BACTERIAL STRAIN</div>
+        </div>
+        <div class="pm-stats-grid">
+          <div class="pm-stat-box">
+            <div class="pm-stat-val" id="pm-day">0</div>
+            <div class="pm-stat-lbl">DAY</div>
+          </div>
+          <div class="pm-stat-box orange-box">
+            <div class="pm-stat-val orange" id="pm-infected">0</div>
+            <div class="pm-stat-lbl">INFECTED</div>
+          </div>
+          <div class="pm-stat-box red-box">
+            <div class="pm-stat-val red" id="pm-dead">0</div>
+            <div class="pm-stat-lbl">DEAD</div>
+          </div>
+          <div class="pm-stat-box blue-box">
+            <div class="pm-stat-val blue" id="pm-cure-pct">0%</div>
+            <div class="pm-stat-lbl">CURE</div>
+          </div>
+        </div>
+        <div class="pm-section-title">SETTINGS</div>
+        <div class="pm-settings">
+          <div class="pm-setting-row">
+            <span class="pm-setting-label">🎵 Music</span>
+            <input type="range" id="pm-music-vol" class="pm-slider" min="0" max="100" value="55">
+            <span class="pm-setting-val" id="pm-music-val">55</span>
+          </div>
+          <div class="pm-setting-row">
+            <span class="pm-setting-label">🔊 SFX</span>
+            <input type="range" id="pm-sfx-vol" class="pm-slider" min="0" max="100" value="90">
+            <span class="pm-setting-val" id="pm-sfx-val">90</span>
+          </div>
+        </div>
+        <div class="pm-buttons">
+          <button class="pm-btn pm-btn-primary" id="pm-resume">▶ RESUME</button>
+          <button class="pm-btn pm-btn-save" id="pm-save">💾 SAVE GAME</button>
+          <button class="pm-btn pm-btn-secondary" id="pm-restart">↺ RESTART</button>
+          <button class="pm-btn pm-btn-danger" id="pm-main-menu">⌂ MAIN MENU</button>
+        </div>
+        <div class="pm-footer">SPACE · ESC to resume</div>
+      </div>
+    </div>
+
+    <!-- COUNTRY INFO PANEL -->
+    <div id="country-panel" class="country-panel hidden">
+      <div class="cp-header">
+        <span id="cp-flag"></span>
+        <span id="cp-name">Country</span>
+        <button id="cp-close">✕</button>
+      </div>
+      <div class="cp-bars">
+        <div class="cp-bar-row">
+          <span>Infected</span>
+          <div class="cp-bar"><div class="cp-fill orange-fill" id="cp-bar-inf"></div></div>
+          <span id="cp-infected" class="orange">0</span>
+        </div>
+        <div class="cp-bar-row">
+          <span>Dead</span>
+          <div class="cp-bar"><div class="cp-fill red-fill" id="cp-bar-dead"></div></div>
+          <span id="cp-dead" class="red">0</span>
+        </div>
+        <div class="cp-bar-row">
+          <span>Healthy</span>
+          <div class="cp-bar"><div class="cp-fill green-fill" id="cp-bar-healthy"></div></div>
+          <span id="cp-healthy" class="green">0</span>
+        </div>
+      </div>
+      <div class="cp-stats">
+        <div class="cp-row cp-status-row"><span>Status</span><span id="cp-status" class="cp-status-badge">—</span></div>
+        <div class="cp-row"><span>Population</span><span id="cp-pop">0</span></div>
+        <div class="cp-row"><span>Climate</span><span id="cp-climate">-</span></div>
+        <div class="cp-row"><span>Wealth</span><span id="cp-wealth">-</span></div>
+        <div class="cp-row"><span>Gov. Response</span><span id="cp-airports">-</span></div>
+        <div class="cp-row"><span>Healthcare</span><span id="cp-healthcare">-</span></div>
+      </div>
+    </div>
+
+    <!-- COUNTRIES INFECTED BADGE -->
+    <div class="countries-badge" id="countries-badge">
+      <span class="live-dot"></span> 🌍 <span id="hud-countries">0</span> / <span id="hud-countries-total">55</span>
+    </div>
+
+    <!-- DAY COUNTER -->
+    <div class="day-counter">DAY <span id="hud-day">0</span></div>
+
+    <!-- BOTTOM HUD -->
+    <div class="hud-bottom">
+      <div class="dna-display" id="dna-display">
+        <span class="dna-icon">⚡</span>
+        <span id="hud-dna">0</span>
+        <span class="dna-label">DNA</span>
+      </div>
+
+      <button class="btn-evolve" id="btn-evolve">
+        🧬 EVOLVE
+        <span class="evo-dot hidden" id="evo-available-dot"></span>
+      </button>
+
+      <div class="speed-controls">
+        <button class="speed-btn" id="btn-pause" title="Pause/Resume">⏸</button>
+        <button class="speed-btn active" id="btn-speed1" data-speed="1">1×</button>
+        <button class="speed-btn" id="btn-speed2" data-speed="2">2×</button>
+        <button class="speed-btn" id="btn-speed3" data-speed="3">3×</button>
+      </div>
+    </div>
+
+    <!-- NEWS BAR -->
+    <div class="news-bar">
+      <span class="news-label">NEWS</span>
+      <div class="news-scroll">
+        <span id="news-text">Monitoring global health conditions...</span>
+      </div>
+    </div>
+
+    <!-- MAP HOVER TOOLTIP -->
+    <div id="map-tooltip" class="map-tooltip hidden">
+      <span id="tt-name"></span>
+      <span id="tt-status"></span>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════ NEWS BROADCAST MODAL -->
+  <div id="modal-news" class="modal hidden">
+    <div class="modal-content news-modal">
+      <div class="news-channel-bar">
+        <span class="news-channel-id" id="news-channel">GNN</span>
+        <div class="news-live-group">
+          <span class="news-live-dot"></span>
+          <span class="news-live-text">LIVE</span>
+        </div>
+        <span class="news-day-stamp" id="news-day">DAY 0</span>
+      </div>
+      <div class="news-img-wrap">
+        <img id="news-img" src="" alt="Breaking News" loading="lazy" />
+        <div class="news-tag-overlay" id="news-tag">BREAKING</div>
+      </div>
+      <div class="news-content-area">
+        <h2 class="news-headline" id="news-headline">Headline</h2>
+        <p  class="news-body-text" id="news-body">Body.</p>
+      </div>
+      <button class="btn-primary news-close-btn" id="btn-close-news" disabled>
+        <span id="news-close-label">CONTINUE (4)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ EVOLUTION MODAL -->
+  <div id="modal-evolution" class="modal hidden">
+    <div class="modal-content evo-modal">
+      <div class="evo-header">
+        <div class="evo-title-block">
+          <h2>🧬 EVOLUTION</h2>
+          <span class="evo-disease-name" id="evo-disease-name"></span>
+        </div>
+        <div class="evo-dna-block">
+          <span class="evo-dna-icon">⚡</span>
+          <span id="evo-dna-count">0</span>
+          <span class="evo-dna-label">DNA</span>
+        </div>
+        <button id="btn-close-evo" class="evo-close">✕</button>
+      </div>
+
+      <!-- Disease stat bars -->
+      <div class="evo-stats-bar">
+        <div class="evo-stat">
+          <span class="evo-stat-label">INFECTIVITY</span>
+          <div class="stat-bar"><div class="stat-fill orange-fill" id="bar-infectivity"></div></div>
+          <span class="stat-pct" id="pct-infectivity">0%</span>
+        </div>
+        <div class="evo-stat">
+          <span class="evo-stat-label">SEVERITY</span>
+          <div class="stat-bar"><div class="stat-fill yellow-fill" id="bar-severity"></div></div>
+          <span class="stat-pct" id="pct-severity">0%</span>
+        </div>
+        <div class="evo-stat">
+          <span class="evo-stat-label">LETHALITY</span>
+          <div class="stat-bar"><div class="stat-fill red-fill" id="bar-lethality"></div></div>
+          <span class="stat-pct" id="pct-lethality">0%</span>
+        </div>
+        <div class="evo-stat">
+          <span class="evo-stat-label">CURE RESIST</span>
+          <div class="stat-bar"><div class="stat-fill blue-fill" id="bar-cureresist"></div></div>
+          <span class="stat-pct" id="pct-cureresist">0%</span>
+        </div>
+      </div>
+
+      <div class="evo-tabs">
+        <button class="evo-tab active" data-tab="transmissions">📡 TRANSMISSION</button>
+        <button class="evo-tab" data-tab="symptoms">🤒 SYMPTOMS</button>
+        <button class="evo-tab" data-tab="abilities">🛡 ABILITIES</button>
+      </div>
+
+      <div id="evo-tab-transmissions" class="evo-tab-content active">
+        <div id="tree-transmissions" class="trait-grid"></div>
+      </div>
+      <div id="evo-tab-symptoms" class="evo-tab-content hidden">
+        <div id="tree-symptoms" class="trait-grid"></div>
+      </div>
+      <div id="evo-tab-abilities" class="evo-tab-content hidden">
+        <div id="tree-abilities" class="trait-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ GAME OVER -->
+  <div id="screen-gameover" class="screen">
+    <div class="gameover-content">
+      <div class="gameover-icon" id="gameover-icon">☣</div>
+      <h2 id="gameover-title">HUMANITY FALLS</h2>
+      <p id="gameover-subtitle">Your pathogen has claimed all life on Earth</p>
+
+      <div class="go-chart-wrap">
+        <div class="go-chart-label">EPIDEMIC CURVE</div>
+        <canvas id="epidemic-chart"></canvas>
+      </div>
+
+      <div class="gameover-stats">
+        <div class="go-stat"><span>Days Elapsed</span><span id="go-days">0</span></div>
+        <div class="go-stat"><span>Peak Infected</span><span id="go-total-inf">0</span></div>
+        <div class="go-stat"><span>Total Dead</span><span id="go-total-dead">0</span></div>
+        <div class="go-stat"><span>Cure Progress</span><span id="go-cure">0%</span></div>
+        <div class="go-stat"><span>Countries Infected</span><span id="go-countries">0</span></div>
+        <div class="go-stat"><span>DNA Spent</span><span id="go-dna-spent">0</span></div>
+      </div>
+
+      <div class="score-block" id="score-block">
+        <div class="score-label" id="gameover-score-label"></div>
+        <div class="score-grade" id="gameover-grade"></div>
+      </div>
+
+      <button class="btn-primary" id="btn-play-again">↺ PLAY AGAIN</button>
+      <button class="btn-secondary" id="btn-main-menu">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- CDN SCRIPTS -->
+  <!-- GSAP for animations -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <!-- Chart.js for epidemic curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+  <!-- GAME SCRIPTS (order matters) -->
+  <script src="js/data.js?v=3"></script>
+  <script src="js/game.js?v=3"></script>
+  <script src="js/map.js?v=3"></script>
+  <script src="js/evolution.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/events.js?v=3"></script>
+  <script src="js/audio.js?v=3"></script>
+  <script src="js/news-popup.js?v=3"></script>
+  <script src="js/main.js?v=3"></script>
+</body>
+</html>
