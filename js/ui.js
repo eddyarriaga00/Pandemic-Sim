@@ -284,6 +284,11 @@ const UI = (() => {
 
     el('cp-airports', govSummary(country));
     el('cp-routes',   routeSummary(country));
+    el('cp-measures', country.collapsed || !country.measures.length ? 'None'
+      : country.measures.map(id => Game.getMeasure(id).name).join(' · '));
+    const lab = Game.getState().cure.top.find(t => t.iso === country.iso);
+    el('cp-research', !Game.getState().cureActive ? 'Not started'
+      : lab ? `${(lab.share * 100).toFixed(1)}% of world effort` : 'Minor contributor');
     const trend = trendFor(country);
     const trendEl = document.getElementById('cp-trend');
     if (trendEl) { trendEl.textContent = trend.text; trendEl.style.color = trend.color; }
@@ -619,17 +624,19 @@ const UI = (() => {
     dock.querySelectorAll('.dock-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         dock.querySelectorAll('.dock-tab').forEach(t => t.classList.toggle('active', t === tab));
-        for (const name of ['world', 'hot', 'events']) {
+        for (const name of ['world', 'hot', 'cure', 'events']) {
           document.getElementById('dock-' + name).classList.toggle('hidden', name !== tab.dataset.dock);
         }
         if (tab.dataset.dock === 'world') drawSpark();
       });
     });
     // Hotspot rows jump to that country
-    document.getElementById('top-countries-list').addEventListener('click', e => {
-      const row = e.target.closest('.top-country-row');
-      if (row) WorldMap.focusCountry(+row.dataset.iso);
-    });
+    for (const id of ['top-countries-list', 'cure-labs']) {
+      document.getElementById(id).addEventListener('click', e => {
+        const row = e.target.closest('.top-country-row');
+        if (row) WorldMap.focusCountry(+row.dataset.iso);
+      });
+    }
     window.addEventListener('resize', () => setTimeout(drawSpark, 200));
   }
 
@@ -700,6 +707,31 @@ const UI = (() => {
       }).join('') || '<div class="dock-empty">Nothing in effect. World events and your operations show up here.</div>';
       if (list.dataset.html !== html) { list.innerHTML = html; list.dataset.html = html; }
     }
+    // Cure research: who is doing the work
+    const sum = document.getElementById('cure-summary');
+    if (sum) {
+      const cu = gs.cure;
+      let html, labs = '';
+      if (!gs.cureActive) {
+        html = '<div class="dock-empty">Nobody is looking for a cure yet. Research starts once the pathogen is identified.</div>';
+      } else {
+        html = `<div class="cure-kpi"><b>${cu.rate.toFixed(2)}%</b><span>per day</span></div>
+                <div class="cure-kpi"><b>${Math.round(cu.priority * 100)}%</b><span>priority</span></div>
+                <div class="cure-kpi"><b>${cu.rate > 0 ? Math.ceil((100 - gs.cureProgress) / cu.rate) : '∞'}</b><span>days left</span></div>`;
+        labs = cu.top.map(t => {
+          const c = Game.getCountry(t.iso);
+          return `<button class="top-country-row" data-iso="${t.iso}">
+            <span class="tc-name">${c.name}</span>
+            <span class="tc-stats"><span class="tc-cure">${(t.share * 100).toFixed(1)}% of research</span><span class="tc-dead">${Math.round(t.working * 100)}% staffed</span></span>
+            <div class="tc-bar-wrap"><div class="tc-bar-cure" style="width:${Math.min(100, t.share * 400)}%"></div></div>
+          </button>`;
+        }).join('');
+      }
+      if (sum.dataset.html !== html) { sum.innerHTML = html; sum.dataset.html = html; }
+      const labsEl = document.getElementById('cure-labs');
+      if (labsEl.dataset.html !== labs) { labsEl.innerHTML = labs; labsEl.dataset.html = labs; }
+    }
+
     const count = document.getElementById('dock-events-count');
     if (count) { count.textContent = gs.activeEvents.length; count.classList.toggle('hidden', !gs.activeEvents.length); }
 
@@ -793,15 +825,10 @@ const UI = (() => {
           }
         }
 
-        // Update threat level bar
-        const threatPct = gs.totalPop > 0
-          ? Math.min(100, ((gs.totalInfected + gs.totalDead * 2) / gs.totalPop) * 100)
-          : 0;
-        const threatFill = document.getElementById('threat-fill');
-        if (threatFill) {
-          threatFill.style.width = threatPct + '%';
-          // Shift gradient color based on threat level
-          threatFill.style.backgroundPositionX = (100 - threatPct) + '%';
+        // World population bar
+        if (gs.totalPop > 0) {
+          setWidth('pb-dead', (_disp.dead / gs.totalPop) * 100);
+          setWidth('pb-inf',  (_disp.infected / gs.totalPop) * 100);
         }
 
         // Add has-deaths class to dead stat when deaths start

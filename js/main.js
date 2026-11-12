@@ -249,6 +249,21 @@ The rest is biology.
       document.getElementById('modal-howto').classList.add('hidden');
   });
 
+  // ─── ACHIEVEMENTS ─────────────────────────────
+  function refreshAchievements() {
+    document.getElementById('ach-count').textContent = Achievements.count();
+  }
+  refreshAchievements();
+  (function initAchievements() {
+    const modal = document.getElementById('modal-achievements');
+    document.getElementById('btn-achievements').addEventListener('click', () => {
+      Achievements.render(document.getElementById('ach-list'));
+      modal.classList.remove('hidden');
+    });
+    document.getElementById('btn-close-achievements').addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+  })();
+
   // ─── SETTINGS MODAL ───────────────────────────
   (function initSettings() {
     const modal   = document.getElementById('modal-settings');
@@ -802,6 +817,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     lockdown: c => `${c.name} orders a national lockdown`,
     sealed:   c => `${c.name} seals itself off from the outside world`,
     collapse: c => `Reports of total government collapse in ${c.name}`,
+    measure:  (c, d) => `${c.name} ${Game.getMeasure(d.measure).verb}`,
   };
 
   Game.on((type, d) => {
@@ -828,7 +844,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         break;
       case 'gov': {
         const c = Game.getCountry(d.iso);
-        if (c && GOV_NEWS[d.kind]) UI.setNewsText(GOV_NEWS[d.kind](c));
+        if (c && GOV_NEWS[d.kind]) UI.setNewsText(GOV_NEWS[d.kind](c, d));
         WorldMap.updateGovIcons();
         break;
       }
@@ -857,11 +873,14 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         Events.onTick(gs);
         if (d.day % 30 === 0) Events.onMonthTick();
         NewsPopup.check(d.day);
+        Achievements.onDay(gs);
         break;
       case 'end':
         closeDilemma();
         WorldMap.setAnimating(false);
-        UI.buzz([40, 60, 40]);
+        if (d.won) UI.buzz([40, 60, 40]);
+        // After the end screen has recorded the win, so 'all six types' can see it
+        setTimeout(() => { Achievements.onEnd(gs, d.won, d.reason); refreshAchievements(); }, 1600);
         d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
         Events.cleanup();
         NewsPopup.reset();

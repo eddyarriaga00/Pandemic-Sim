@@ -1016,20 +1016,26 @@ const WorldMap = (() => {
     const r = 1.7 * Math.max(0.7, Math.min(1.2, baseScale / 129)) / Math.pow(t.k, 0.72);
     // Three groups of live points pulse out of step with each other
     const live = [new Path2D(), new Path2D(), new Path2D()], glow = new Path2D(), ash = new Path2D();
+    const calm = new Path2D(); // people the pathogen hasn't reached
     let growing = false;
 
     for (const c of Game.getAllCountries()) {
       const dp = dotPoints[c.iso];
       if (!dp) continue;
       const affected = (c.infected + c.dead) / c.pop;
-      if (affected <= 0) { dp.shown = 0; continue; }
-      const n      = dp.pts.length;
-      const target = Math.min(n, Math.max(1, Math.round(n * Math.pow(affected, 0.42))));
+      const n = dp.pts.length;
+      if (affected <= 0) dp.shown = 0;
+      const target = affected <= 0 ? 0 : Math.min(n, Math.max(1, Math.round(n * Math.pow(affected, 0.42))));
       const dead   = Math.min(target, Math.round(n * Math.pow(c.dead / c.pop, 0.6)));
       // Ease toward the target so new points arrive a few at a time
       if (dp.shown < target) { dp.shown = Math.min(target, dp.shown + Math.max(1, Math.ceil((target - dp.shown) * 0.2))); growing = growing || dp.shown < target; }
       else dp.shown = target;
 
+      const rc = r * 0.62;
+      for (let i = dp.shown; i < n; i++) {
+        const [x, y] = dp.pts[i];
+        calm.moveTo(x + rc, y); calm.arc(x, y, rc, 0, 6.2832);
+      }
       for (let i = 0; i < dp.shown; i++) {
         const [x, y] = dp.pts[i];
         if (i < dead) { ash.moveTo(x + r * 0.8, y); ash.arc(x, y, r * 0.8, 0, 6.2832); }
@@ -1040,6 +1046,7 @@ const WorldMap = (() => {
         }
       }
     }
+    ctx.fillStyle = 'rgba(150,178,215,0.2)'; ctx.fill(calm);
     ctx.fillStyle = 'rgba(132,118,112,0.6)'; ctx.fill(ash);
     if (!LOW_FX) { ctx.fillStyle = 'rgba(255,70,40,0.13)'; ctx.fill(glow); }
     for (let b = 0; b < 3; b++) {

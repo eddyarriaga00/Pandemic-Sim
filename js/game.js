@@ -63,6 +63,10 @@ const Game = (() => {
     noticeBonus: 0,   // detection added or removed by the player's choices
     log: [],          // { day, key, text }: the run's turning points
     mode: 'standard', dailyDate: null,
+    synergies: [],      // ids active right now
+    synergiesFound: [], // ids discovered this run
+    cure: { rate: 0, priority: 0, top: [] }, // what the UI shows about research
+    counters: { decisions: 0, measures: 0 },
     advice: { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 },
     seed: 1,
   };
@@ -82,7 +86,7 @@ const Game = (() => {
   function emptyMods() {
     return { air: 0, sea: 0, land: 0, cold: 0, heat: 0, tropical: 0, poor: 0, rich: 0,
              urban: 0, rural: 0, stealth: 0, dnaRate: 0, lockdownResist: 0, leak: 0,
-             extremophile: 0 };
+             extremophile: 0, mutRefund: 0, mutRate: 0, spore: 0, mask: 0 };
   }
 
   // ─── EVENTS OUT ───────────────────────────────
@@ -129,7 +133,9 @@ const Game = (() => {
   for (const t of ALL_TRAITS) TRAITS[t.id] = t;
 
   function findTrait(id)  { return TRAITS[id] || null; }
-  function getAllTraits() { return ALL_TRAITS; }
+  // Signature traits belong to one pathogen type.
+  const fitsType = t => !t.types || t.types.includes(state.diseaseType);
+  function getAllTraits() { return ALL_TRAITS.filter(fitsType); }
 
   // Disease stats and route/context modifiers are always rebuilt from the
   // owned trait set, so buying, devolving, mutating and loading can't drift.
@@ -150,6 +156,25 @@ const Game = (() => {
       resist += e.cureResist  || 0;
       if (t.mods) for (const k in t.mods) mods[k] = (mods[k] || 0) + t.mods[k];
     }
+
+    // Synergies: bonuses for owning certain traits together
+    const active = [];
+    for (const sy of SYNERGIES) {
+      if (!sy.needs.every(id => state.traits.has(id))) continue;
+      active.push(sy.id);
+      const e = sy.effects || {};
+      inf    += e.infectivity || 0;
+      sev    += e.severity    || 0;
+      leth   += (e.lethality  || 0) * td.lethalityMod;
+      resist += e.cureResist  || 0;
+      if (sy.mods) for (const k in sy.mods) mods[k] = (mods[k] || 0) + sy.mods[k];
+      if (state.phase === 'spreading' && !state.synergiesFound.includes(sy.id)) {
+        state.synergiesFound.push(sy.id);
+        toast(`Synergy discovered: ${sy.name}. ${sy.desc}`, 'dna');
+        emit('synergy', { id: sy.id });
+      }
+    }
+    state.synergies = active;
     state.infectivity = clamp(inf, 0, 1);
     state.severity    = clamp(sev, 0, 1);
     state.lethality   = clamp(leth, 0, 1);
@@ -184,6 +209,9 @@ const Game = (() => {
     state.peakInfected = 0; state.originIso = null;
     state.bubbles = []; state.nextBubbleId = 0;
     state.ops = {};
+    state.synergies = []; state.synergiesFound = [];
+    state.cure = { rate: 0, priority: 0, top: [] };
+    state.counters = { decisions: 0, measures: 0 };
     state.dilemma = null; state.dilemmasSeen = []; state.noticeBonus = 0; state.log = [];
     state.mode = config.mode || 'standard'; state.dailyDate = config.dailyDate || null;
     state.advice = { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
@@ -198,6 +226,7 @@ const Game = (() => {
         reached: false,
         airportClosed: false, portClosed: false, borderClosed: false,
         lockdown: false, collapsed: false,
+        measures: [], nextMeasureDay: 0,
       };
       state.totalPop     += c.pop;
       state.totalHealthy += c.pop;
@@ -267,7 +296,7 @@ const Game = (() => {
 
   // Severity as the world sees it. Going dormant hides most of it.
   function visibleSeverity() {
-    return state.severity * (1 - Math.min(0.9, state.eventBoosts.severityMask));
+    return state.severity * (1 - Math.min(0.9, state.eventBoosts.severityMask)) * (1 - Math.min(0.8, mods.mask));
   }
 
   // ─── PER-COUNTRY RATES ────────────────────────
@@ -292,6 +321,12 @@ const Game = (() => {
     if (c.pop >= 80e6)       b *= 1 + mods.urban;
     if (c.pop <  25e6)       b *= 1 + mods.rural;
     if (c.lockdown && !c.collapsed) b *= 0.55 + 0.45 * Math.min(1, mods.lockdownResist);
+    if (c.measures.length && !c.collapsed) {
+      for (const id of c.measures) {
+        const m = MEASURES[id];
+        if (m.counters.some(t => state.traits.has(t))) b *= 1 - m.cut;
+      }
+    }
     return b;
   }
 
@@ -422,11 +457,14 @@ const Game = (() => {
   function advanceCure() {
     const sev = visibleSeverity();
     let effort = 0, maxEffort = 0;
+    const track = stepCount % (STEPS_PER_DAY * 4) === 0; // refresh the breakdown every few days
+    const parts = track ? [] : null;
     for (const c of countryList) {
       const w = c.healthcare * T.wealthCure[c.wealth] * Math.sqrt(c.pop);
       const working = Math.max(0, (c.pop - c.dead - c.infected * Math.min(1, sev * 1.5)) / c.pop);
       maxEffort += w;
       effort    += w * working * working;
+      if (parts) parts.push({ iso: c.iso, value: w * working * working, working });
     }
     // A disease nobody is dying from doesn't get wartime funding.
     const infFrac  = state.totalInfected / state.totalPop;
@@ -438,6 +476,14 @@ const Game = (() => {
     const resist = Math.min(0.92, state.cureResist + state.eventBoosts.cureResist);
     const perDay = T.cureBase * diff.cureSpeed * (td.cureMod || 1) *
                    (effort / maxEffort) * priority * (1 - resist);
+
+    if (parts) {
+      parts.sort((a, b) => b.value - a.value);
+      state.cure = {
+        rate: perDay, priority,
+        top: parts.slice(0, 6).map(p => ({ iso: p.iso, share: effort > 0 ? p.value / effort : 0, working: p.working })),
+      };
+    }
 
     state.cureProgress = Math.min(100, state.cureProgress + perDay * DT);
     if (state.cureProgress >= 100) {
@@ -505,6 +551,27 @@ const Game = (() => {
         emit('gov', { iso: c.iso, kind: 'lockdown' });
         if (loud) toast(`🔒 ${c.name} enters national lockdown`, 'warn');
       }
+
+      // Targeted measures against the way this pathogen actually spreads.
+      // Richer countries can afford more of them.
+      const maxMeasures = c.wealth === 'rich' ? 4 : c.wealth === 'middle' ? 3 : 1;
+      if (alarm > thr * 3 && c.measures.length < maxMeasures && state.day >= c.nextMeasureDay) {
+        let best = null, bestScore = 0;
+        for (const m of COUNTERMEASURES) {
+          if (c.measures.includes(m.id)) continue;
+          let score = 0;
+          for (const id of m.counters) if (state.traits.has(id)) score += (TRAITS[id].effects.infectivity || 0.03);
+          if (score > bestScore) { bestScore = score; best = m; }
+        }
+        c.nextMeasureDay = state.day + 12 + Math.floor(rand() * 10);
+        if (best) {
+          c.measures.push(best.id);
+          state.counters.measures++;
+          mark('measure', `${c.name} is first to target how you spread: ${best.name.toLowerCase()}`);
+          emit('gov', { iso: c.iso, kind: 'measure', measure: best.id });
+          if (loud) toast(`🧪 ${c.name} ${best.verb}`, 'warn');
+        }
+      }
     }
   }
 
@@ -562,7 +629,7 @@ const Game = (() => {
     }
 
     // Fungal spores ignore borders entirely.
-    if (td.sporeBurst && rand() < 0.012) {
+    if (td.sporeBurst && rand() < 0.012 * (1 + mods.spore)) {
       const open    = countryList.filter(canReceive);
       const sources = countryList.filter(c => c.infected > 1000);
       if (open.length && sources.length) {
@@ -603,7 +670,7 @@ const Game = (() => {
   // the disease easier to notice. They can be devolved for no refund.
   function rollMutation() {
     const td = DISEASE_TYPES[state.diseaseType];
-    if (!td.mutationRate || rand() >= td.mutationRate) return;
+    if (!td.mutationRate || rand() >= td.mutationRate * (1 + mods.mutRate)) return;
     const t = randomAvailableSymptom();
     if (t) grantMutation(t);
   }
@@ -717,6 +784,19 @@ const Game = (() => {
     return { ok: true };
   }
 
+  const MEASURES = {};
+  for (const m of COUNTERMEASURES) MEASURES[m.id] = m;
+
+  // How many countries are currently countering a given trait.
+  function counteredIn(traitId) {
+    let n = 0;
+    for (const c of countryList) {
+      if (c.collapsed) continue;
+      if (c.measures.some(id => MEASURES[id].counters.includes(traitId))) n++;
+    }
+    return n;
+  }
+
   // ─── DILEMMAS ─────────────────────────────────
   const DILEMMA_BY_ID = {};
   for (const d of DILEMMAS) DILEMMA_BY_ID[d.id] = d;
@@ -748,6 +828,7 @@ const Game = (() => {
     if (o.dna < 0 && state.dna < -o.dna) return { ok: false, msg: 'Not enough DNA' };
 
     state.dilemma = null;
+    state.counters.decisions++;
     state.nextDilemmaDay = state.day + 35 + Math.floor(rand() * 25);
 
     if (o.dna > 0) awardDna(o.dna);
@@ -886,7 +967,7 @@ const Game = (() => {
   // ─── BUY / DEVOLVE ────────────────────────────
   function buyTrait(id) {
     const trait = TRAITS[id];
-    if (!trait)                return { ok: false, msg: 'Unknown trait' };
+    if (!trait || !fitsType(trait)) return { ok: false, msg: 'Unknown trait' };
     if (state.traits.has(id))  return { ok: false, msg: 'Already owned' };
     if (trait.requires.some(r => !state.traits.has(r))) return { ok: false, msg: 'Requirements not met' };
     if (state.dna < trait.cost) return { ok: false, msg: 'Not enough DNA' };
@@ -908,7 +989,7 @@ const Game = (() => {
       return { ok: false, msg: `Devolve ${dependants.map(d => d.name).join(', ')} first` };
     }
     const wasFree = state.freeTraits.has(id);
-    const refund  = wasFree ? 0 : Math.max(1, Math.floor(trait.cost * 0.5));
+    const refund  = wasFree ? mods.mutRefund : Math.max(1, Math.floor(trait.cost * 0.5));
     state.traits.delete(id);
     state.freeTraits.delete(id);
     state.dna      += refund;
@@ -957,6 +1038,10 @@ const Game = (() => {
     state.dilemmasSeen = d.state.dilemmasSeen || [];
     state.noticeBonus  = d.state.noticeBonus || 0;
     state.mode    = d.state.mode || 'standard';
+    state.synergiesFound = d.state.synergiesFound || [];
+    state.cure     = d.state.cure || { rate: 0, priority: 0, top: [] };
+    state.counters = d.state.counters || { decisions: 0, measures: 0 };
+    for (const c of Object.values(state.countries)) { c.measures = c.measures || []; c.nextMeasureDay = c.nextMeasureDay || 0; }
     state.advice  = d.state.advice || { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
     rngState      = d.rngState;
     stepCount     = d.stepCount;
@@ -1014,7 +1099,8 @@ const Game = (() => {
     betaFor, deathRateFor, reproductionFor,
     getBubbles, collectBubble,
     opStatus, useOperation, getOperations: () => OPERATIONS,
-    getDilemma, resolveDilemma,
+    getDilemma, resolveDilemma, counteredIn,
+    getSynergies: () => SYNERGIES, getMeasure: id => MEASURES[id],
     saveGame, loadSave, hasSave, clearSave, getSaveMeta,
   };
 })();

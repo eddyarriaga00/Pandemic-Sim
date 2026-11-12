@@ -757,8 +757,91 @@ const EVOLUTION_TREE = {
       mods: { rich: 0.15 },
       category: 'abilities',
     },
+
+    // ── Signature traits: each pathogen type has its own pair ──
+    { id: 'sig_bacteria1', name: 'Endospores 1', icon: '🫘', types: ['bacteria'], cost: 8, requires: [],
+      desc: 'Dormant spores survive on surfaces for weeks. Lockdowns work far less well.',
+      effects: {}, mods: { lockdownResist: 0.3 }, category: 'abilities' },
+    { id: 'sig_bacteria2', name: 'Endospores 2', icon: '📦', types: ['bacteria'], cost: 13, requires: ['sig_bacteria1'],
+      desc: 'Spores ride along in cargo and luggage, slipping through closed routes.',
+      effects: { infectivity: 0.04 }, mods: { leak: 0.08 }, category: 'abilities' },
+
+    { id: 'sig_virus1', name: 'Recombination 1', icon: '♻️', types: ['virus'], cost: 8, requires: [],
+      desc: 'Shed genes are recycled. Devolving a mutated symptom now pays 2 DNA.',
+      effects: {}, mods: { mutRefund: 2 }, category: 'abilities' },
+    { id: 'sig_virus2', name: 'Recombination 2', icon: '🎲', types: ['virus'], cost: 13, requires: ['sig_virus1'],
+      desc: 'Mutates twice as often, and each shed mutation pays 4 DNA.',
+      effects: {}, mods: { mutRefund: 2, mutRate: 1 }, category: 'abilities' },
+
+    { id: 'sig_fungus1', name: 'Spore Clouds 1', icon: '🌫️', types: ['fungus'], cost: 8, requires: [],
+      desc: 'Spore bursts happen twice as often.',
+      effects: {}, mods: { spore: 1 }, category: 'abilities' },
+    { id: 'sig_fungus2', name: 'Spore Clouds 2', icon: '🌪️', types: ['fungus'], cost: 13, requires: ['sig_fungus1'],
+      desc: 'High-altitude spore drift. Bursts become far more frequent still.',
+      effects: { infectivity: 0.04 }, mods: { spore: 2 }, category: 'abilities' },
+
+    { id: 'sig_parasite1', name: 'Host Manipulation 1', icon: '🧭', types: ['parasite'], cost: 8, requires: [],
+      desc: 'Infected hosts feel an urge to travel. Spreads further over land and by air.',
+      effects: {}, mods: { land: 0.6, air: 0.3 }, category: 'abilities' },
+    { id: 'sig_parasite2', name: 'Host Manipulation 2', icon: '🎭', types: ['parasite'], cost: 13, requires: ['sig_parasite1'],
+      desc: 'Hosts hide their symptoms and avoid doctors. Much harder to detect.',
+      effects: {}, mods: { stealth: 0.5, mask: 0.2 }, category: 'abilities' },
+
+    { id: 'sig_prion1', name: 'Long Incubation 1', icon: '⏳', types: ['prion'], cost: 8, requires: [],
+      desc: 'Symptoms take years to show. A quarter of your severity is hidden from the world.',
+      effects: {}, mods: { mask: 0.25 }, category: 'abilities' },
+    { id: 'sig_prion2', name: 'Long Incubation 2', icon: '🕰️', types: ['prion'], cost: 13, requires: ['sig_prion1'],
+      desc: 'Half of your severity is hidden, and researchers struggle to find anything to treat.',
+      effects: { cureResist: 0.1 }, mods: { mask: 0.25 }, category: 'abilities' },
+
+    { id: 'sig_synth1', name: 'Signal Jamming 1', icon: '📡', types: ['nano-virus'], cost: 8, requires: [],
+      desc: 'Corrupts diagnostic equipment. Cure research slows.',
+      effects: { cureResist: 0.14 }, category: 'abilities' },
+    { id: 'sig_synth2', name: 'Signal Jamming 2', icon: '🛰️', types: ['nano-virus'], cost: 13, requires: ['sig_synth1'],
+      desc: 'Labs can no longer share results reliably. Cure research slows further.',
+      effects: { cureResist: 0.16 }, category: 'abilities' },
   ],
 };
+
+// ─── SYNERGIES ───────────────────────────────────
+// Bonuses for owning particular traits together. They apply while every
+// listed trait is owned. The player is not told the pairings in advance.
+const SYNERGIES = [
+  { id: 'red_mist',    name: 'Fine Red Mist',     needs: ['cough', 'hemorrhagic_shock'],
+    desc: 'Every cough carries blood.', effects: { infectivity: 0.06, severity: 0.04 } },
+  { id: 'farm_table',  name: 'Farm to Table',     needs: ['livestock', 'diarrhoea'],
+    desc: 'The food chain does the work.', effects: { infectivity: 0.05 }, mods: { poor: 0.06 } },
+  { id: 'fever_dream', name: 'Fever Dream',       needs: ['fever', 'insanity'],
+    desc: 'Patients cannot describe what is wrong with them.', effects: { cureResist: 0.08 } },
+  { id: 'carrier',     name: 'Silent Carrier',    needs: ['symbiosis', 'saliva2'],
+    desc: 'Healthy-looking hosts, highly contagious.', mods: { stealth: 0.3 } },
+  { id: 'monsoon',     name: 'Monsoon Bloom',     needs: ['water2', 'insects'],
+    desc: 'Standing water breeds carriers.', mods: { tropical: 0.15 } },
+  { id: 'stowaway',    name: 'Stowaways',         needs: ['rats', 'water1'],
+    desc: 'Every ship carries rats.', mods: { sea: 0.7 } },
+  { id: 'superbug',    name: 'Hospital Superbug', needs: ['blood2', 'drug_resist2'],
+    desc: 'Hospitals become the worst place to be.', effects: { cureResist: 0.05 }, mods: { rich: 0.12 } },
+  { id: 'jet_stream',  name: 'Jet Stream',        needs: ['air2', 'travel_adaptation'],
+    desc: 'Built for long-haul flights.', mods: { air: 0.6 } },
+  { id: 'collapse',    name: 'Systemic Collapse', needs: ['necrosis', 'pulmonary_fibrosis'],
+    desc: 'Nothing left for doctors to save.', effects: { lethality: 0.06 } },
+  { id: 'crowd',       name: 'Rush Hour',         needs: ['sweating', 'urban_survival'],
+    desc: 'Packed trains, damp handrails.', mods: { urban: 0.12 } },
+];
+
+// ─── COUNTERMEASURES ─────────────────────────────
+// What governments do about the particular way your pathogen spreads.
+// A measure only bites while you still own one of the traits it counters;
+// each active one cuts transmission in that country by `cut`.
+const COUNTERMEASURES = [
+  { id: 'masks',      name: 'Mask mandate',     verb: 'orders masks in public',        counters: ['air1', 'air2', 'extreme_bioaerosol', 'cough'], cut: 0.12 },
+  { id: 'water',      name: 'Water treatment',  verb: 'starts treating all tap water', counters: ['water1', 'water2', 'vomiting', 'diarrhoea'],   cut: 0.12 },
+  { id: 'fumigation', name: 'Fumigation',       verb: 'begins mass fumigation',        counters: ['insects'],                                     cut: 0.14 },
+  { id: 'cull',       name: 'Livestock cull',   verb: 'culls its livestock',           counters: ['livestock'],                                   cut: 0.12 },
+  { id: 'pests',      name: 'Pest control',     verb: 'launches a rat extermination drive', counters: ['rats'],                                   cut: 0.12 },
+  { id: 'screening',  name: 'Blood screening',  verb: 'screens all blood and needles', counters: ['blood1', 'blood2'],                            cut: 0.12 },
+  { id: 'distancing', name: 'Distancing rules', verb: 'bans gatherings',               counters: ['saliva1', 'saliva2', 'sweating'],              cut: 0.10 },
+];
 
 // ─── OPERATIONS ──────────────────────────────────
 // One-off actions the player triggers with DNA. Each has a cooldown and

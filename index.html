@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=12">
+  <link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
 
@@ -91,6 +91,7 @@
       </button>
       <div class="splash-secondary-btns">
         <button class="btn-secondary" id="btn-how-to-play"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg> HOW TO PLAY</button>
+        <button class="btn-secondary" id="btn-achievements"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg> <span id="ach-count">0/15</span></button>
         <button class="btn-secondary" id="btn-settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg> SETTINGS</button>
       </div>
     </div>
@@ -130,6 +131,10 @@
           <p>Visible symptoms and deaths fill the detection meter. Once identified, research begins and governments start closing routes. Dead and sick researchers cure nothing.</p>
         </div>
         <div class="howto-section">
+          <h3>COUNTERMEASURES &amp; SYNERGIES</h3>
+          <p>Governments fight the way you spread: masks against airborne traits, fumigation against insects, culls against livestock. Trait cards show how many countries are countering them. Some traits are stronger together; those pairings are yours to discover.</p>
+        </div>
+        <div class="howto-section">
           <h3>DECISIONS</h3>
           <p>Every month or two the game stops and puts a choice to you. Both options cost something: DNA, attention, or control over what your pathogen becomes.</p>
         </div>
@@ -143,6 +148,17 @@
         </div>
       </div>
       <button class="btn-primary" id="btn-close-howto">UNDERSTOOD</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ ACHIEVEMENTS -->
+  <div id="modal-achievements" class="modal hidden">
+    <div class="modal-content countries-modal">
+      <div class="countries-head">
+        <h2>ACHIEVEMENTS</h2>
+        <button id="btn-close-achievements" class="evo-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div id="ach-list" class="country-list"></div>
     </div>
   </div>
 
@@ -327,11 +343,10 @@
       <div class="detect-track"><div class="detect-fill" id="detect-fill"></div></div>
     </div>
 
-    <!-- THREAT LEVEL METER -->
-    <div class="threat-bar-container" id="threat-bar-container">
-      <div class="threat-label">THREAT</div>
-      <div class="threat-track"><div class="threat-fill" id="threat-fill"></div></div>
-      <span class="threat-pct" id="threat-pct">0%</span>
+    <!-- WORLD POPULATION BAR: dead | infected | untouched -->
+    <div class="pop-bar" title="World population: dead, infected, untouched">
+      <div class="pb-dead" id="pb-dead"></div>
+      <div class="pb-inf" id="pb-inf"></div>
     </div>
 
     <!-- WORLD MAP (D3 renders here) -->
@@ -404,6 +419,7 @@
       <div class="dock-tabs">
         <button class="dock-tab active" data-dock="world">WORLD</button>
         <button class="dock-tab" data-dock="hot">HOTSPOTS</button>
+        <button class="dock-tab" data-dock="cure">CURE</button>
         <button class="dock-tab" data-dock="events">ACTIVE<span id="dock-events-count" class="dock-count hidden">0</span></button>
       </div>
       <div class="dock-pane" id="dock-world">
@@ -419,6 +435,10 @@
         </div>
       </div>
       <div class="dock-pane hidden" id="dock-hot"><div id="top-countries-list"></div></div>
+      <div class="dock-pane hidden" id="dock-cure">
+        <div class="cure-summary" id="cure-summary"></div>
+        <div id="cure-labs"></div>
+      </div>
       <div class="dock-pane hidden" id="dock-events"><div id="dock-events-list"></div></div>
     </div>
 
@@ -453,7 +473,9 @@
         <div class="cp-row"><span>Wealth</span><span id="cp-wealth">-</span></div>
         <div class="cp-row"><span>Outbreak</span><span id="cp-trend">-</span></div>
         <div class="cp-row"><span>Gov. Response</span><span id="cp-airports">-</span></div>
+        <div class="cp-row"><span>Countermeasures</span><span id="cp-measures">-</span></div>
         <div class="cp-row"><span>Routes</span><span id="cp-routes">-</span></div>
+        <div class="cp-row"><span>Cure research</span><span id="cp-research">-</span></div>
         <div class="cp-row"><span>Healthcare</span><span id="cp-healthcare">-</span></div>
       </div>
     </div>
@@ -591,6 +613,8 @@
         </div>
       </div>
 
+      <div class="synergy-strip" id="synergy-strip"></div>
+
       <div class="evo-tabs">
         <button class="evo-tab active" data-tab="transmissions"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> TRANSMISSION</button>
         <button class="evo-tab" data-tab="symptoms"><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg> SYMPTOMS</button>
@@ -660,14 +684,15 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=12"></script>
-  <script src="js/game.js?v=12"></script>
-  <script src="js/map.js?v=12"></script>
-  <script src="js/evolution.js?v=12"></script>
-  <script src="js/ui.js?v=12"></script>
-  <script src="js/events.js?v=12"></script>
-  <script src="js/audio.js?v=12"></script>
-  <script src="js/news-popup.js?v=12"></script>
-  <script src="js/main.js?v=12"></script>
+  <script src="js/data.js?v=13"></script>
+  <script src="js/game.js?v=13"></script>
+  <script src="js/map.js?v=13"></script>
+  <script src="js/evolution.js?v=13"></script>
+  <script src="js/ui.js?v=13"></script>
+  <script src="js/events.js?v=13"></script>
+  <script src="js/audio.js?v=13"></script>
+  <script src="js/news-popup.js?v=13"></script>
+  <script src="js/achievements.js?v=13"></script>
+  <script src="js/main.js?v=13"></script>
 </body>
 </html>

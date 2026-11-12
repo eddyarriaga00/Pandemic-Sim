@@ -2696,3 +2696,149 @@ button .ic { pointer-events: none; }
    the top and centre only when there is room to spare. */
 #screen-gameover { justify-content: flex-start; }
 .gameover-content { margin: auto 0; padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: 28px; }
+
+/* ═══════════════════════════════════════════════
+   SMALLER CONTROLS
+   Buttons were sized like banners. Desktop gets compact ones; touch
+   screens keep a 40px minimum so they stay easy to hit.
+   ═══════════════════════════════════════════════ */
+.btn-primary {
+  width: auto; min-width: 190px; max-width: 260px;
+  padding: 9px 22px; font-size: 0.88rem; letter-spacing: 0.12em;
+  box-shadow: 0 2px 10px rgba(218,54,51,0.3);
+}
+.btn-secondary {
+  width: auto; min-width: 0; max-width: 260px;
+  padding: 7px 16px; font-size: 0.78rem;
+}
+.btn-back { font-size: 0.74rem; padding: 6px; }
+.pulse-btn { animation: none; }
+
+/* Title screen: a tight column of controls instead of a wall */
+.splash-content { gap: 10px; }
+#btn-start { min-width: 230px; padding: 11px 26px; font-size: 0.95rem; }
+.btn-load-save, .btn-daily { width: 230px; max-width: 230px; }
+.btn-daily { padding: 7px 12px; gap: 1px; }
+.btn-daily .daily-title { font-size: 0.8rem; }
+.btn-daily .daily-sub   { font-size: 0.58rem; }
+.splash-secondary-btns { display: flex; gap: 6px; width: auto; }
+.splash-secondary-btns .btn-secondary { padding: 6px 10px; font-size: 0.7rem; letter-spacing: 0.08em; flex: 0 0 auto; }
+.splash-secondary-btns .btn-secondary .ic { margin-right: 4px; }
+
+/* Setup */
+.diff-btn { padding: 7px 4px; font-size: 0.74rem; }
+#btn-begin-game { margin-top: 4px; }
+
+/* In-game bottom bar: controls no longer fill the whole bar */
+.hud-bottom { justify-content: space-between; }
+.dna-display { min-height: 36px; padding: 5px 10px; min-width: 0; }
+#hud-dna { font-size: 0.92rem; }
+.btn-evolve {
+  flex: 0 1 190px; min-height: 36px; padding: 6px 14px;
+  font-size: 0.88rem; letter-spacing: 0.14em; margin-right: auto;
+}
+.btn-evolve .ic { font-size: 1rem; }
+.speed-btn { min-width: 34px; min-height: 34px; padding: 4px 8px; font-size: 0.7rem; }
+.speed-btn .ic { font-size: 0.9rem; }
+.map-reset-btn { width: 32px; height: 32px; font-size: 0.9rem; }
+.music-btn { min-width: 38px; font-size: 0.95rem; }
+
+/* Menus and dialogs */
+.pm-btn { padding: 8px 12px; font-size: 0.8rem; min-height: 0; }
+.pm-buttons { gap: 6px; }
+.cc-yes, .cc-no { padding: 8px 10px; font-size: 0.78rem; }
+.origin-back-btn { min-height: 32px; padding: 5px 12px; font-size: 0.72rem; }
+.briefing-go { margin-top: 10px; }
+.trait-devolve-btn { padding: 3px 8px; font-size: 0.6rem; }
+.dl-option { padding: 10px 12px; min-height: 0; }
+.dock-tab { min-height: 30px; font-size: 0.68rem; letter-spacing: 0.08em; }
+.evo-tab { padding: 9px 4px; font-size: 0.8rem; }
+.nc-read-more { padding: 6px; font-size: 0.66rem; }
+#btn-share, #btn-play-again, #btn-main-menu { width: auto; }
+.gameover-content .btn-primary, .gameover-content .btn-secondary { min-width: 200px; }
+
+@media (pointer: coarse) {
+  .btn-primary, .btn-secondary, .pm-btn, .cc-yes, .cc-no, .origin-back-btn { min-height: 40px; }
+  .speed-btn { min-width: 40px; min-height: 40px; }
+  .btn-evolve, .dna-display { min-height: 40px; }
+  .dock-tab { min-height: 34px; }
+  .evo-tab  { min-height: 42px; }
+  .map-reset-btn { width: 36px; height: 36px; }
+  .splash-secondary-btns .btn-secondary { min-height: 38px; }
+}
+@media (max-width: 540px) {
+  .btn-evolve { flex: 1 1 auto; margin-right: 0; font-size: 0.82rem; }
+  .speed-btn  { min-width: 38px; font-size: 0.68rem; }
+  .dock-tab   { font-size: 0.62rem; letter-spacing: 0.04em; }
+}
+
+/* ═══════════════════════════════════════════════
+   NEW PANELS
+   ═══════════════════════════════════════════════ */
+
+/* World population bar under the HUD */
+.threat-bar-container { display: none; }
+.pop-bar {
+  position: absolute; top: 58px; left: 0; right: 0; height: 3px; z-index: 30;
+  display: flex; background: rgba(150,178,215,0.16);
+}
+.pb-dead { height: 100%; width: 0; background: #8a7d78; transition: width 1s linear; }
+.pb-inf  { height: 100%; width: 0; background: var(--red); transition: width 1s linear; box-shadow: 0 0 8px rgba(248,81,73,0.7); }
+
+/* Cure tab */
+.cure-summary { display: flex; gap: 6px; margin-bottom: 6px; }
+.cure-kpi { flex: 1; text-align: center; padding: 4px 2px; background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.18); border-radius: 6px; }
+.cure-kpi b { display: block; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; color: var(--blue); }
+.cure-kpi span { font-size: 0.48rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--tx-3); }
+.tc-cure { color: var(--blue); }
+.tc-bar-cure { height: 100%; background: var(--blue); border-radius: 2px; min-width: 2px; }
+
+/* Synergies */
+.synergy-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  padding: 8px 16px; border-top: 1px solid var(--bdr);
+}
+.sy-label { font-family: var(--font-display); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; color: var(--tx-3); margin-right: 4px; }
+.sy-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 2px 8px; border-radius: 4px; border: 1px solid var(--bdr-2);
+  font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.04em; color: var(--tx-2);
+}
+.sy-chip i { font-family: var(--font-mono); font-style: normal; font-size: 0.56rem; color: var(--tx-3); }
+.sy-chip.on { color: var(--green); border-color: rgba(63,185,80,0.45); background: rgba(63,185,80,0.07); }
+.sy-chip.on i { color: rgba(63,185,80,0.75); }
+.sy-chip.unknown { color: var(--tx-3); border-style: dashed; padding: 2px 7px; }
+
+.trait-countered { font-size: 0.62rem; color: var(--red); margin-top: 2px; }
+.lane-sig { margin-left: 8px; padding: 1px 6px; border-radius: 3px; background: rgba(227,179,65,0.1); border: 1px solid rgba(227,179,65,0.35); color: var(--amber); letter-spacing: 0.08em; }
+
+/* Achievements */
+.ach-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 12px;
+  background: var(--bg-3); border: 1px solid var(--bdr); border-radius: 8px; opacity: 0.55;
+}
+.ach-row.got { opacity: 1; border-color: rgba(227,179,65,0.35); }
+.ach-mark { display: flex; font-size: 1.1rem; color: var(--tx-3); }
+.ach-row.got .ach-mark { color: var(--amber); }
+.ach-text { display: flex; flex-direction: column; gap: 1px; }
+.ach-text b { font-family: var(--font-display); font-size: 0.95rem; letter-spacing: 0.06em; color: var(--tx-0); font-weight: 600; }
+.ach-text span { font-size: 0.68rem; color: var(--tx-2); }
+#modal-achievements { z-index: 600; }
+
+@media (max-width: 540px) {
+  .synergy-strip { padding: 6px 10px; gap: 4px; }
+  .sy-chip i { display: none; }
+  .cp-stats .cp-row:has(#cp-measures), .cp-stats .cp-row:has(#cp-research) { grid-column: 1 / -1; }
+}
+
+.btn-load-save { font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 10px; padding-right: 10px; }
+
+#modal-achievements .countries-modal { padding: 16px 14px max(16px, env(safe-area-inset-bottom)); }
+@media (max-width: 540px) {
+  /* Four stats share a phone's width: keep the numbers whole */
+  .hud-stat   { gap: 4px; padding: 8px 4px; }
+  .hud-icon   { font-size: 0.85rem; }
+  .hud-number { font-size: 0.76rem; letter-spacing: -0.02em; }
+  .hud-label  { font-size: 0.56rem; letter-spacing: 0.1em; }
+}
+@media (max-width: 380px) { .hud-icon { display: none; } }

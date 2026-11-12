@@ -62,7 +62,26 @@ const Evolution = (() => {
     document.body.classList.remove('evo-open');
   }
 
+  // Synergies: the ones found this run by name, the rest as blanks to chase.
+  function renderSynergies() {
+    const strip = document.getElementById('synergy-strip');
+    if (!strip) return;
+    const gs = Game.getState();
+    const all = Game.getSynergies();
+    const fx = sy => [
+      ...Object.entries(sy.effects || {}).map(([k, v]) => `+${Math.round(v * 100)}% ${{ infectivity: 'inf', severity: 'sev', lethality: 'leth', cureResist: 'resist' }[k]}`),
+      ...Object.entries(sy.mods || {}).map(([k, v]) => MOD_LABELS[k] ? MOD_LABELS[k](v) : ''),
+    ].filter(Boolean).join(', ');
+    strip.innerHTML = `<span class="sy-label">SYNERGIES ${gs.synergiesFound.length}/${all.length}</span>` +
+      all.map(sy => {
+        if (!gs.synergiesFound.includes(sy.id)) return '<span class="sy-chip unknown">?</span>';
+        const on = gs.synergies.includes(sy.id);
+        return `<span class="sy-chip${on ? ' on' : ''}" title="${sy.desc}">${sy.name}<i>${on ? fx(sy) : 'inactive'}</i></span>`;
+      }).join('');
+  }
+
   function refreshTree() {
+    renderSynergies();
     renderTab('transmissions');
     renderTab('symptoms');
     renderTab('abilities');
@@ -126,11 +145,15 @@ const Evolution = (() => {
       if (label) effArr.push(label(trait.mods[k]));
     }
 
+    // Governments fight specific traits; say so where the player decides
+    const countered = Game.counteredIn(trait.id);
+
     card.innerHTML = `
       <span class="trait-icon">${trait.icon}</span>
       <div class="trait-name">${trait.name}</div>
       <div class="trait-desc">${trait.desc}</div>
       ${effArr.length ? `<div class="trait-effects">${effArr.join(' · ')}</div>` : ''}
+      ${countered ? `<div class="trait-countered">Countered in ${countered} ${countered === 1 ? 'country' : 'countries'}</div>` : ''}
       <div class="trait-footer">
         ${owned
           ? `<span class="trait-owned-badge">${free ? UI.icon('helix') + ' MUTATED' : UI.icon('check') + ' EVOLVED'}</span>
@@ -175,7 +198,7 @@ const Evolution = (() => {
     if (!container) return;
 
     const gs     = Game.getState();
-    const chains = chainsFor(EVOLUTION_TREE[tab]);
+    const chains = chainsFor(EVOLUTION_TREE[tab].filter(t => !t.types || t.types.includes(gs.diseaseType)));
     container.className = 'trait-lanes';
     container.innerHTML = '';
 
@@ -183,7 +206,7 @@ const Evolution = (() => {
     for (const { root, cols } of chains.filter(c => c.cols.length > 1)) {
       const lane = document.createElement('div');
       lane.className = 'lane';
-      lane.innerHTML = `<div class="lane-title">${root.name.replace(/ 1$/, '')}</div>`;
+      lane.innerHTML = `<div class="lane-title">${root.name.replace(/ 1$/, '')}${root.types ? ' <span class="lane-sig">' + DISEASE_TYPES[gs.diseaseType].name + ' only</span>' : ''}</div>`;
       const track = document.createElement('div');
       track.className = 'lane-track';
       cols.forEach((col, i) => {
