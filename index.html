@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pathogen">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PATHOGEN — Global Pandemic Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 
@@ -392,6 +396,7 @@
 
     <!-- DAY COUNTER -->
     <div class="day-counter">DAY <span id="hud-day">0</span></div>
+    <button class="map-reset-btn" id="btn-map-reset" title="Show the whole map" aria-label="Show the whole map">⤢</button>
 
     <!-- BOTTOM HUD -->
     <div class="hud-bottom">
@@ -428,6 +433,18 @@
       <span id="tt-status"></span>
     </div>
 
+  </div>
+
+  <!-- ═══════════════════════════════════════ COUNTRY LIST (origin picker) -->
+  <div id="modal-countries" class="modal hidden">
+    <div class="modal-content countries-modal">
+      <div class="countries-head">
+        <h2>CHOOSE ORIGIN</h2>
+        <button id="btn-close-countries" class="evo-close" aria-label="Close">✕</button>
+      </div>
+      <input type="search" id="country-search" placeholder="Search countries..." autocomplete="off" spellcheck="false">
+      <div id="country-list" class="country-list"></div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════ NEWS BROADCAST MODAL -->
@@ -550,14 +567,14 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=8"></script>
-  <script src="js/game.js?v=8"></script>
-  <script src="js/map.js?v=8"></script>
-  <script src="js/evolution.js?v=8"></script>
-  <script src="js/ui.js?v=8"></script>
-  <script src="js/events.js?v=8"></script>
-  <script src="js/audio.js?v=8"></script>
-  <script src="js/news-popup.js?v=8"></script>
-  <script src="js/main.js?v=8"></script>
+  <script src="js/data.js?v=9"></script>
+  <script src="js/game.js?v=9"></script>
+  <script src="js/map.js?v=9"></script>
+  <script src="js/evolution.js?v=9"></script>
+  <script src="js/ui.js?v=9"></script>
+  <script src="js/events.js?v=9"></script>
+  <script src="js/audio.js?v=9"></script>
+  <script src="js/news-popup.js?v=9"></script>
+  <script src="js/main.js?v=9"></script>
 </body>
 </html>

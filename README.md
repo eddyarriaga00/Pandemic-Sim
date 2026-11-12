@@ -44,7 +44,7 @@ The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It pu
 - Procedural soundtrack and sound effects from the Web Audio API (no audio files)
 - Autosave and continue
 - Epidemic curve on the end screen
-- Works on phones
+- Built for phones as well as desktops: the map fills a portrait screen, near-miss taps snap to the nearest country, the origin can be picked from a searchable list, and it can be added to the home screen
 
 ---
 

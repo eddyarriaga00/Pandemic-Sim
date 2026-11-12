@@ -18,6 +18,7 @@
       const m = menu();
       if (!m) return;
       m.classList.remove('hidden');
+      document.body.classList.add('pm-open');
 
       const gs = Game.getState();
       // Fill stats
@@ -51,6 +52,7 @@
       if (!visible) return;
       const m = menu();
       if (!m) return;
+      document.body.classList.remove('pm-open');
       if (typeof gsap !== 'undefined') {
         gsap.to(card(), { opacity: 0, scale: 0.94, y: 8, duration: 0.18, ease: 'power2.in', onComplete: () => m.classList.add('hidden') });
       } else {
@@ -551,11 +553,15 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       <div class="origin-inner">
         <div class="origin-icon">☣</div>
         <h3>SELECT ORIGIN</h3>
-        <p>Click any country to place Patient Zero</p>
-        <button id="btn-origin-back" class="origin-back-btn">← CHANGE PATHOGEN</button>
+        <p>Tap a country to place Patient Zero</p>
+        <div class="origin-btns">
+          <button id="btn-origin-list" class="origin-back-btn">☰ COUNTRY LIST</button>
+          <button id="btn-origin-back" class="origin-back-btn">← BACK</button>
+        </div>
       </div>
     `;
     document.getElementById('screen-game').appendChild(originOverlay);
+    document.getElementById('btn-origin-list').addEventListener('click', openCountryList);
 
     document.getElementById('btn-origin-back').addEventListener('click', () => {
       removeOverlays();
@@ -565,6 +571,56 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     });
 
     if (WorldMap.setPick) WorldMap.setPick(true);
+  }
+
+  // ─── COUNTRY LIST ─────────────────────────────
+  // Picking a small country by tapping a phone-sized world map is fiddly,
+  // so the origin can also be chosen from a searchable list.
+  const listModal  = document.getElementById('modal-countries');
+  const listSearch = document.getElementById('country-search');
+  const listEl     = document.getElementById('country-list');
+
+  function renderCountryList() {
+    const q = listSearch.value.trim().toLowerCase();
+    const rows = Game.getAllCountries()
+      .filter(c => !q || c.name.toLowerCase().includes(q))
+      .sort((a, b) => b.pop - a.pop);
+    listEl.innerHTML = rows.map(c => `
+      <button class="country-row" data-iso="${c.iso}">
+        <span class="cr-name">${c.name}</span>
+        <span class="cr-meta">${UI.fmt(c.pop)} · ${c.climate} · ${c.wealth}</span>
+      </button>`).join('') || '<div class="country-empty">No country matches</div>';
+  }
+
+  function openCountryList() {
+    listSearch.value = '';
+    renderCountryList();
+    listModal.classList.remove('hidden');
+  }
+  function closeCountryList() { listModal.classList.add('hidden'); }
+
+  listSearch.addEventListener('input', renderCountryList);
+  document.getElementById('btn-close-countries').addEventListener('click', closeCountryList);
+  listModal.addEventListener('click', e => { if (e.target === listModal) closeCountryList(); });
+  listEl.addEventListener('click', e => {
+    const row = e.target.closest('.country-row');
+    if (!row) return;
+    const iso = +row.dataset.iso;
+    closeCountryList();
+    WorldMap.zoomToCountry(iso, 3, 0.4);
+    window.onMapCountryPick(iso, Game.getCountry(iso));
+  });
+
+  document.getElementById('btn-map-reset').addEventListener('click', () => WorldMap.resetZoom());
+
+  // ─── KEEP THE SCREEN AWAKE WHILE PLAYING ──────
+  let wakeLock = null;
+  async function holdScreenAwake() {
+    if (wakeLock || !('wakeLock' in navigator) || document.hidden) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch { /* denied or unsupported: not worth telling the player */ }
   }
 
   // Map country tap callback (registered as window hook for map.js)
@@ -601,6 +657,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   function beginInfection(iso) {
     if (WorldMap.setPick) WorldMap.setPick(false);
     Game.startInCountry(iso);
+    holdScreenAwake();
     WorldMap.zoomToCountry(iso);
     WorldMap.setOrigin(iso);
     setTimeout(() => WorldMap.pulseCountry(iso), 500);
@@ -694,11 +751,20 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   }
 
   // ─── MOBILE: PREVENT SCROLL BOUNCE ───────────
+  // The page itself never scrolls. Let a touch scroll only if it started
+  // inside something that genuinely can.
+  function canScroll(node) {
+    for (let n = node; n && n !== document.body; n = n.parentElement) {
+      if (n.scrollHeight > n.clientHeight + 1) {
+        const oy = getComputedStyle(n).overflowY;
+        if (oy === 'auto' || oy === 'scroll') return true;
+      }
+    }
+    return false;
+  }
   document.addEventListener('touchmove', e => {
-    const scrollable = e.target.closest(
-      '.evo-tab-content, .country-list-grid, .setup-content, .modal-content, #screen-pick-country, #screen-setup, #screen-gameover'
-    );
-    if (!scrollable) e.preventDefault();
+    if (e.target.type === 'range') return; // volume sliders
+    if (!canScroll(e.target)) e.preventDefault();
   }, { passive: false });
 
   // ─── ORIENTATION ──────────────────────────────
@@ -710,8 +776,9 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     if (document.hidden && gs.phase === 'spreading' && !gs.paused) {
       Game.setPaused(true);
       Game.saveGame();
-      const pb = document.getElementById('btn-pause');
-      if (pb) { pb.textContent = '▶'; pb.classList.add('active'); }
+      UI.syncPauseButton();
+    } else if (!document.hidden && gs.phase === 'spreading') {
+      holdScreenAwake();
     }
   });
 

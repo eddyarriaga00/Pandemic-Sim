@@ -43,6 +43,18 @@ const WorldMap = (() => {
 
   const GOV_ICON_MIN_ZOOM = 1.8; // below this the icons just bury the map
 
+  // Phones: blur filters are the most expensive thing on the map, and
+  // hover tooltips make no sense without a pointer that can hover.
+  const coarse   = window.matchMedia('(pointer: coarse)').matches;
+  const LOW_FX   = coarse || window.innerWidth < 600;
+  const NO_HOVER = window.matchMedia('(hover: none)').matches;
+  const isSheetLayout = () => window.innerWidth <= 540; // country panel is a bottom sheet
+
+  // Labels that stay visible even when the whole world is on screen
+  const MAJOR_LABELS = new Set([840, 124, 76, 643, 156, 356, 36]);
+  let labelBase = 9;   // px at zoom 1, shrinks with the map on small screens
+  let baseScale = 129; // projection scale for the current viewport
+
   // Route colors by method
   const ROUTE_COLORS = {
     'air travel':    { stroke: 'rgba(88,166,255,0.75)',  glow: 'rgba(88,166,255,0.3)'  },
@@ -68,22 +80,16 @@ const WorldMap = (() => {
       .style('background', `radial-gradient(ellipse at 50% 55%, #0c1828 0%, ${C.ocean} 65%, #040c16 100%)`)
       .style('border-radius', '0');
 
-    projection = d3.geoNaturalEarth1()
-      .scale(W / 6.2)
-      .translate([W / 2, H / 2.1]);
-
+    projection = d3.geoNaturalEarth1();
+    fitProjection(W, H);
     pathGen = d3.geoPath().projection(projection);
 
     zoomBehavior = d3.zoom()
-      .scaleExtent([0.85, 14])
       .on('zoom', ({ transform }) => {
         _currentZoom = transform;
         g.attr('transform', transform);
-        // Scale label font inversely with zoom so labels stay readable
-        if (labelLayer) {
-          const s = Math.max(0.5, Math.min(1.2, 1 / transform.k));
-          labelLayer.selectAll('.country-label').attr('font-size', `${9 * s}px`);
-        }
+        applyLabelZoom(transform.k);
+        if (bubbleLayer) bubbleLayer.selectAll('.dna-bubble').attr('transform', bubbleTransform);
         // Government icons only make sense once you can tell countries apart
         if (govIconLayer) {
           govIconLayer.style('display', transform.k < GOV_ICON_MIN_ZOOM ? 'none' : null);
@@ -98,6 +104,7 @@ const WorldMap = (() => {
 
     svg.call(zoomBehavior);
     svg.on('dblclick.zoom', null);
+    fitZoom(W, H);
 
     addDefs();
 
@@ -125,6 +132,44 @@ const WorldMap = (() => {
     } finally {
       if (loader) loader.classList.add('hidden');
     }
+  }
+
+  // ─── FIT TO VIEWPORT ──────────────────────────
+  // A world map is twice as wide as it is tall. On a portrait phone,
+  // fitting the width leaves a thin strip, so instead fill more of the
+  // height and let the player pan sideways. Pinching out still shows it all.
+  function fitProjection(W, H) {
+    const fitWidth = W / 6.2;
+    baseScale = Math.max(fitWidth, Math.min(H * 0.21, W / 2.7));
+    projection.scale(baseScale).translate([W / 2, H / 2.1]);
+    if (baseScale > fitWidth) {
+      // Start centred on Africa/Eurasia, where most countries are
+      const x = projection([35, 0])[0];
+      projection.translate([W / 2 - (x - W / 2), H / 2.1]);
+    }
+    labelBase = Math.max(5.5, Math.min(9, 9 * baseScale / 129));
+  }
+
+  function fitZoom(W, H) {
+    const minK = Math.min(0.85, (W / 6.2) / baseScale * 0.95);
+    const [[x0, y0], [x1, y1]] = d3.geoPath(projection).bounds({ type: 'Sphere' });
+    const pad = 60;
+    zoomBehavior
+      .scaleExtent([minK, 14])
+      .translateExtent([[x0 - pad, y0 - pad], [x1 + pad, y1 + pad]]);
+  }
+
+  // Keep labels a readable size at any zoom, and drop the minor ones
+  // when the map is too small for them to fit without colliding.
+  function applyLabelZoom(k) {
+    if (!labelLayer) return;
+    const s = Math.max(0.5, Math.min(1.2, 1 / k));
+    const showMinor = baseScale * k >= 150;
+    labelLayer.selectAll('.country-label')
+      .attr('font-size', `${labelBase * s}px`)
+      .style('display', function () {
+        return showMinor || MAJOR_LABELS.has(+this.getAttribute('data-iso')) ? null : 'none';
+      });
   }
 
   // ─── SVG DEFS ─────────────────────────────────
@@ -187,15 +232,12 @@ const WorldMap = (() => {
       .attr('stroke-width', 0.5)
       .on('click',      onCountryClick)
       .on('mousemove',  onCountryHover)
-      .on('mouseleave', onCountryLeave)
-      .on('touchend',   function(event, d) {
-        event.preventDefault();
-        onCountryClick.call(this, event, d);
-      });
+      .on('mouseleave', onCountryLeave);
 
     // Border mesh
     g.append('path')
       .datum(topojson.mesh(world, world.objects.countries, (a, b) => a !== b))
+      .attr('class', 'border-mesh')
       .attr('fill', 'none')
       .attr('stroke', '#252c35')
       .attr('stroke-width', 0.3);
@@ -226,9 +268,13 @@ const WorldMap = (() => {
 
     // Build initial country name labels
     renderCountryLabels(countries.features);
+    applyLabelZoom(_currentZoom.k);
 
+    // Taps on open water: forgive a near miss, otherwise deselect
     svg.on('click', event => {
       if (event.target === svgEl || event.target.classList?.contains('graticule')) {
+        const near = nearestCountry(event);
+        if (near) { selectCountry(near.iso, near); return; }
         UI.hideCountryPanel();
         clearSelection();
         hideRichTooltip();
@@ -256,7 +302,7 @@ const WorldMap = (() => {
         .attr('y', c[1])
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
-        .attr('font-size', '9px')
+        .attr('font-size', `${labelBase}px`)
         .attr('font-family', 'Inter, system-ui, sans-serif')
         .attr('font-weight', '600')
         .attr('fill', 'rgba(255,255,255,0.35)')
@@ -410,37 +456,58 @@ const WorldMap = (() => {
   // ─── CLICK HANDLER ────────────────────────────
   function onCountryClick(event, d) {
     event.stopPropagation();
-    const iso     = parseInt(d.id, 10);
-    const country = Game.getCountry(iso);
-    const gs      = Game.getState();
+    const iso = parseInt(d.id, 10);
+    // Small countries are a few pixels wide on a phone. If the tap landed
+    // on untracked land, or right beside a tracked country, take the
+    // nearest tracked one instead.
+    const country = Game.getCountry(iso) || nearestCountry(event);
+    if (!country) {
+      if (Game.getState().phase === 'idle') _showNonGameTooltip(event);
+      return;
+    }
+    selectCountry(country.iso, country);
+  }
 
-    if (gs.phase === 'idle') {
-      if (!country) { _showNonGameTooltip(event); return; }
+  // Closest tracked country to a tap, within a thumb's width.
+  function nearestCountry(event) {
+    const [px, py] = d3.pointer(event, g.node());
+    const reach = (coarse ? 26 : 14) / _currentZoom.k;
+    let best = null, bestD = reach * reach;
+    for (const c of Game.getAllCountries()) {
+      const p = centroids[c.iso];
+      if (!p) continue;
+      const dd = (p[0] - px) ** 2 + (p[1] - py) ** 2;
+      if (dd < bestD) { bestD = dd; best = c; }
+    }
+    return best;
+  }
+
+  function selectCountry(iso, country) {
+    if (Game.getState().phase === 'idle') {
       if (typeof window.onMapCountryPick === 'function') window.onMapCountryPick(iso, country);
       return;
     }
 
-    if (!country) return;
-
     clearSelection();
     selectedIso = iso;
-    d3.select(event.currentTarget)
-      .classed('selected', true)
-      .attr('stroke', '#58a6ff')
-      .attr('stroke-width', 1.5);
+    const el = pathsByIso[iso];
+    if (el && !el.empty()) {
+      el.classed('selected', true).attr('stroke', '#58a6ff').attr('stroke-width', 1.5);
+    }
 
     UI.showCountryPanel(country);
 
-    // Gentle zoom toward clicked country (if not zoomed already)
-    if (_currentZoom.k < 2.5) {
+    if (isSheetLayout()) {
+      // Keep the country in the strip of map still visible above the sheet
+      zoomToCountry(iso, Math.max(2.5, _currentZoom.k), 0.22);
+    } else if (_currentZoom.k < 2.5) {
       zoomToCountry(iso, 2.5);
     }
-
-    if (typeof AudioEngine !== 'undefined') AudioEngine.sfxCountryClick();
   }
 
   // ─── HOVER HANDLER ────────────────────────────
   function onCountryHover(event, d) {
+    if (NO_HOVER) return; // touch screens fire a fake mousemove on tap
     const iso     = parseInt(d.id, 10);
     const country = Game.getCountry(iso);
     const gs      = Game.getState();
@@ -557,7 +624,7 @@ const WorldMap = (() => {
       const color   = colorFor(c);
       const deadPct = c.dead / c.pop;
       const infPct  = (c.infected + c.dead) / c.pop;
-      const filter  = (deadPct > 0.12 || infPct > 0.35) ? 'url(#inf-glow)' : null;
+      const filter  = !LOW_FX && (deadPct > 0.12 || infPct > 0.35) ? 'url(#inf-glow)' : null;
 
       if (_prevColors[c.iso] !== color)   { el.attr('fill', color);   _prevColors[c.iso]  = color; }
       if (_prevFilters[c.iso] !== filter) { el.attr('filter', filter); _prevFilters[c.iso] = filter; }
@@ -661,7 +728,7 @@ const WorldMap = (() => {
       })
       .attr('filter', d => {
         const pct = (d.infected + d.dead) / d.pop;
-        return pct > 0.15 ? 'url(#dot-glow)' : null;
+        return !LOW_FX && pct > 0.15 ? 'url(#dot-glow)' : null;
       });
 
     dots.exit().transition().duration(600).attr('r', 0).remove();
@@ -760,10 +827,14 @@ const WorldMap = (() => {
     sel.exit().transition().duration(400).style('opacity', 0).remove();
   }
 
+  // Bubbles stay roughly thumb-sized on screen instead of growing with the
+  // map: bigger than drawn on phones, and shrinking as you zoom in.
   function bubbleTransform(d) {
     const c = centroids[d.iso];
     if (!c) return 'translate(0,0)';
-    return `translate(${c[0] + d.dx}, ${c[1] + d.dy})`;
+    const k = _currentZoom.k;
+    const s = (coarse ? 1.5 : 1) / Math.pow(k, 0.8);
+    return `translate(${c[0] + d.dx * s}, ${c[1] + d.dy * s}) scale(${s})`;
   }
 
   // ─── EPICENTER ────────────────────────────────
@@ -875,7 +946,8 @@ const WorldMap = (() => {
   }
 
   // ─── ZOOM TO COUNTRY ──────────────────────────
-  function zoomToCountry(iso, targetScale) {
+  // focusY: where on screen (0 top, 1 bottom) the country should end up.
+  function zoomToCountry(iso, targetScale, focusY) {
     if (!mapInitialized || !worldTopo) return;
     const scale = targetScale || 3;
     const features = topojson.feature(worldTopo, worldTopo.objects.countries).features;
@@ -888,7 +960,7 @@ const WorldMap = (() => {
     const [[x0,y0],[x1,y1]] = pathGen.bounds(feature);
     const s = Math.min(scale, 0.8 / Math.max((x1-x0)/W, (y1-y0)/H));
     const tx = W/2 - s*(x0+x1)/2;
-    const ty = H/2 - s*(y0+y1)/2;
+    const ty = H * (focusY != null ? focusY : 0.5) - s*(y0+y1)/2;
 
     svg.transition().duration(750).ease(d3.easeCubicInOut)
       .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(s));
@@ -969,12 +1041,16 @@ const WorldMap = (() => {
     const W = containerEl.clientWidth;
     const H = containerEl.clientHeight;
 
+    if (!W || !H) return; // game screen not visible
     svg.attr('width', W).attr('height', H);
-    projection.scale(W / 6.2).translate([W / 2, H / 2.1]);
+    fitProjection(W, H);
     pathGen = d3.geoPath().projection(projection);
+    fitZoom(W, H);
+    svg.call(zoomBehavior.transform, d3.zoomIdentity);
 
     g.selectAll('.country-path').attr('d', pathGen);
     g.select('.graticule').attr('d', pathGen);
+    g.select('.border-mesh').attr('d', pathGen);
 
     if (worldTopo) {
       computeCentroids(topojson.feature(worldTopo, worldTopo.objects.countries).features);

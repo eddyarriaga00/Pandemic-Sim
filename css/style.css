@@ -2093,3 +2093,186 @@ html, body {
 /* Toasts and news cards would sit on top of the evolution screen's controls */
 body.evo-open #toast-container,
 body.evo-open .news-card { display: none; }
+
+/* ═══════════════════════════════════════════════
+   MOBILE
+   Everything below is about phones: touch target sizes, safe areas,
+   what gets out of the way on a small screen, and cheaper rendering.
+   ═══════════════════════════════════════════════ */
+
+html, body { overscroll-behavior: none; }
+.modal-content, .evo-tab-content, .country-list, .country-panel, .pm-card,
+.setup-content, .gameover-content, .story-wrap, .briefing-inner {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pause menu and evolution screen own the display while open */
+body.pm-open #toast-container,
+body.pm-open .news-card { display: none; }
+.pm-card { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.modal-content { max-height: 90dvh; }
+
+/* Reset-view button, under the day counter */
+.map-reset-btn {
+  position: absolute; top: 98px; right: 10px; z-index: 30;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6,9,14,0.9);
+  border: 1px solid rgba(48,54,61,0.8); border-radius: 8px;
+  color: var(--tx-2); font-size: 1rem; cursor: pointer;
+}
+.map-reset-btn:active { background: rgba(255,255,255,0.08); color: var(--tx-0); }
+
+/* Origin picker buttons */
+.origin-btns { display: flex; gap: 8px; }
+.origin-back-btn { min-height: 40px; }
+
+/* Country list */
+#modal-countries { z-index: 600; }
+.countries-modal {
+  display: flex; flex-direction: column; gap: 10px;
+  height: 80dvh; overflow: hidden;
+}
+#modal-countries .countries-modal { padding: 16px 14px max(16px, env(safe-area-inset-bottom)); }
+.countries-head { display: flex; align-items: center; justify-content: space-between; }
+.countries-head h2 { font-size: 0.85rem; letter-spacing: 0.16em; color: var(--red); margin: 0; }
+#country-search {
+  width: 100%; padding: 12px 14px;
+  background: var(--bg-0); color: var(--tx-0);
+  border: 1px solid var(--bdr-2); border-radius: 8px;
+  font-family: var(--font); font-size: 16px; /* under 16px, iOS zooms the page on focus */
+  user-select: text; -webkit-user-select: text;
+}
+#country-search:focus { outline: none; border-color: var(--red); }
+.country-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.country-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 48px; padding: 8px 12px; text-align: left;
+  background: var(--bg-3); border: 1px solid var(--bdr); border-radius: 8px;
+  color: var(--tx-0); font-family: var(--font); cursor: pointer;
+}
+.country-row:active { border-color: var(--red); background: rgba(248,81,73,0.08); }
+.cr-name { font-size: 0.85rem; font-weight: 600; }
+.cr-meta { font-size: 0.62rem; color: var(--tx-2); font-family: var(--font-mono); text-transform: capitalize; white-space: nowrap; }
+.country-empty { padding: 24px; text-align: center; color: var(--tx-3); font-size: 0.8rem; }
+#disease-name { font-size: 16px; }
+
+/* Notches and rounded corners (needs viewport-fit=cover) */
+.hud-top    { padding-top: env(safe-area-inset-top); }
+.hud-top, .hud-bottom, .news-bar {
+  padding-left:  max(var(--edge, 0px), env(safe-area-inset-left));
+  padding-right: max(var(--edge, 0px), env(safe-area-inset-right));
+}
+.hud-bottom { --edge: 8px; }
+.news-bar   { padding-bottom: env(safe-area-inset-bottom); height: calc(36px + env(safe-area-inset-bottom)); }
+.hud-bottom { bottom: calc(36px + env(safe-area-inset-bottom)); }
+.splash-ticker-bar { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Fingers, not cursors */
+@media (pointer: coarse) {
+  .evo-close, #cp-close, .nc-close {
+    min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .evo-tab            { min-height: 46px; }
+  .trait-devolve-btn  { min-height: 34px; padding: 6px 12px; }
+  .diff-btn           { min-height: 44px; }
+  .music-btn          { min-width: 44px; }
+  .nc-read-more       { min-height: 42px; }
+  .pm-slider          { height: 28px; }
+
+  /* Blurring what's behind a panel is costly on phone GPUs and barely visible */
+  *, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .map-scanlines { display: none; }
+  .country-path  { transition: none; }
+}
+
+/* ─── Portrait phones ─── */
+@media (max-width: 540px) {
+  /* HUD: legible numbers */
+  .hud-label  { font-size: 0.46rem; }
+  .hud-rate   { font-size: 0.5rem; }
+  .hud-number { font-size: 0.82rem; }
+
+  /* Bottom bar: real touch targets */
+  .hud-bottom  { gap: 6px; }
+  .speed-controls { gap: 4px; }
+  .speed-btn   { min-width: 42px; min-height: 44px; padding: 6px 4px; font-size: 0.7rem; }
+  .btn-evolve  { min-height: 44px; }
+  .dna-display { min-height: 44px; }
+
+  /* Toasts: narrow, right-aligned, clear of the badges on the left */
+  #toast-container { top: calc(62px + env(safe-area-inset-top)); right: 8px; max-width: 58vw; gap: 4px; }
+  .toast { font-size: 0.64rem; padding: 6px 9px; }
+  .day-counter   { top: calc(64px + env(safe-area-inset-top)); }
+  .map-reset-btn { top: calc(132px + env(safe-area-inset-top)); }
+  .countries-badge { top: calc(64px + env(safe-area-inset-top)); }
+  .detect-meter  { top: calc(92px + env(safe-area-inset-top)); }
+
+  /* Origin picker: a slim banner at the top so it never covers the map */
+  .origin-overlay {
+    top: calc(132px + env(safe-area-inset-top)); bottom: auto;
+    left: 8px; right: 56px; transform: none; padding: 0;
+  }
+  .origin-pulse-ring, .origin-icon { display: none; }
+  .origin-inner { width: 100%; min-width: 0; padding: 10px 12px; gap: 4px; border-radius: 10px; }
+  .origin-inner h3 { font-size: 0.68rem; }
+  .origin-btns { width: 100%; margin-top: 4px; }
+  .origin-btns .origin-back-btn { flex: 1; margin-top: 0; padding: 6px 8px; }
+  .country-confirm { bottom: calc(108px + env(safe-area-inset-bottom)); width: calc(100vw - 16px); }
+  .cc-yes, .cc-no { min-height: 46px; }
+
+  /* Country sheet: two columns of facts so it covers less of the map */
+  .country-panel { bottom: calc(96px + env(safe-area-inset-bottom)) !important; max-height: 50dvh; }
+  .cp-stats { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+  .cp-stats .cp-row { flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 0; }
+  .cp-stats .cp-row span:first-child { font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .cp-stats .cp-row span:last-child  { font-size: 0.74rem; }
+  .cp-status-row { grid-column: 1 / -1; flex-direction: row !important; align-items: center !important; justify-content: space-between; }
+
+  /* News card: one line of headline, full width, just above the controls */
+  .news-card { left: 8px; right: 8px; width: auto; bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .news-card .nc-sub { display: none; }
+  .news-card .nc-content { padding: 8px 10px; }
+  .news-card .nc-headline { font-size: 0.8rem; }
+
+  /* Evolution: one column, sticky header stays reachable */
+  .trait-grid { grid-template-columns: 1fr; }
+  .evo-modal  { max-height: 94dvh; }
+
+  .btn-primary { font-size: 0.82rem; }
+  #btn-story-continue { font-size: 0.74rem; letter-spacing: 0.04em; }
+}
+
+/* ─── Landscape phones ─── */
+@media (orientation: landscape) and (max-height: 500px) {
+  #toast-container { top: 48px; max-width: 42vw; gap: 4px; }
+  .toast { font-size: 0.62rem; padding: 5px 9px; }
+  .countries-badge, .day-counter { top: 50px; }
+  .detect-meter  { top: 78px; }
+  .map-reset-btn { top: 82px; width: 36px; height: 36px; }
+  .speed-btn     { min-width: 44px; min-height: 40px; }
+
+  /* Country facts go in a side sheet; a bottom sheet would hide the map */
+  .country-panel {
+    left: auto !important; right: max(8px, env(safe-area-inset-right)) !important;
+    top: 48px; bottom: 88px !important;
+    transform: none !important; width: 290px !important;
+    max-height: none; overflow-y: auto; animation: none;
+  }
+  .news-card { width: 300px; bottom: 88px; right: auto; left: max(8px, env(safe-area-inset-left)); }
+  .news-card .nc-sub, .news-card .nc-read-more { display: none; }
+
+  .origin-overlay { top: 50px; bottom: auto; left: 50%; }
+  .origin-pulse-ring, .origin-icon { display: none; }
+  .origin-inner { flex-direction: row; gap: 12px; padding: 8px 14px; }
+  .origin-inner p { display: none; }
+  .origin-btns .origin-back-btn { margin-top: 0; }
+  .country-confirm { bottom: 88px; }
+
+  .pm-card { padding: 14px 18px 12px; }
+  .countries-modal { height: 92dvh; }
+  .setup-content, .gameover-content { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .type-grid { grid-template-columns: repeat(3, 1fr); }
+}

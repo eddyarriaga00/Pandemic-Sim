@@ -165,9 +165,10 @@ const UI = (() => {
     const container = document.getElementById('toast-container');
     if (!container) { setTimeout(drainToastQueue, 50); return; }
 
-    // Limit visible toasts
+    // Limit visible toasts: a phone screen has room for two
+    const maxVisible = window.innerWidth <= 540 || window.innerHeight <= 500 ? 2 : 4;
     const existing = container.querySelectorAll('.toast');
-    if (existing.length >= 4) existing[0].remove();
+    for (let i = 0; i <= existing.length - maxVisible; i++) existing[i].remove();
 
     if (typeof AudioEngine !== 'undefined') {
       if (type === 'alert') AudioEngine.sfxAlert();
@@ -371,6 +372,14 @@ const UI = (() => {
     });
   }
 
+  function syncPauseButton() {
+    const btn = document.getElementById('btn-pause');
+    if (!btn) return;
+    const paused = Game.getState().paused;
+    btn.textContent = paused ? '▶' : '⏸';
+    btn.classList.toggle('active', paused);
+  }
+
   // ─── EVO AVAILABLE DOT ───────────────────────
   function checkEvoAvailable() {
     const gs  = Game.getState();
@@ -507,13 +516,21 @@ const UI = (() => {
   }
 
   // ─── HELPERS ──────────────────────────────────
+  // The render loop calls these every frame. Only touch the DOM when the
+  // value actually changed, so idle frames cost nothing (matters on phones).
+  const _nodes = {}, _lastText = {}, _lastWidth = {};
+  function node(id) { return _nodes[id] || (_nodes[id] = document.getElementById(id)); }
   function el(id, val) {
-    const node = document.getElementById(id);
-    if (node) node.textContent = val;
+    val = String(val);
+    if (_lastText[id] === val) return;
+    const n = node(id);
+    if (n) { n.textContent = val; _lastText[id] = val; }
   }
   function setWidth(id, pctVal) {
-    const node = document.getElementById(id);
-    if (node) node.style.width = pctVal + '%';
+    const w = pctVal.toFixed(2) + '%';
+    if (_lastWidth[id] === w) return;
+    const n = node(id);
+    if (n) { n.style.width = w; _lastWidth[id] = w; }
   }
 
   // ─── TOP INFECTED COUNTRIES ───────────────────
@@ -675,6 +692,6 @@ const UI = (() => {
     showCountryPanel, hideCountryPanel, setNewsText,
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
-    flashScreen, updateTopCountries, resetHud, clearToasts, govSummary, trendFor,
+    flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton, govSummary, trendFor,
   };
 })();

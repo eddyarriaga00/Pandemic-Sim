@@ -1,0 +1,13 @@
+{
+  "name": "PATHOGEN: Global Pandemic Simulator",
+  "short_name": "Pathogen",
+  "description": "A pandemic strategy game built on a stochastic epidemic model.",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#06090e",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
