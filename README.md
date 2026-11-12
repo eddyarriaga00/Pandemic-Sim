@@ -59,7 +59,8 @@ The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It pu
 - Advisor warnings when the outbreak is burning out, countries seal themselves off, or DNA sits unspent
 - Best winning run per pathogen type and difficulty, kept on the device
 - World events, a news ticker and news stories that follow what is actually happening in the game
-- Procedural soundtrack and sound effects from the Web Audio API (no audio files)
+- An adaptive score synthesised with the Web Audio API (no audio files): sparse while undetected, a plucked line once identified, ticking as the cure closes in, a heartbeat and low drone as the world dies. It muffles when paused
+- Synthesised effects for every action, routed through a shared reverb and a limiter
 - Autosave and continue
 - Epidemic curve on the end screen
 - Built for phones as well as desktops: in portrait the map sits on top with the dashboard under it and the controls at the bottom, near-miss taps snap to the nearest country, the origin can be picked from a searchable list, and it can be added to the home screen
@@ -90,6 +91,18 @@ python3 -m http.server 8080
 ```
 
 Then open http://localhost:8080.
+
+---
+
+## Checking the audio
+
+Sound levels can't be judged by reading code, so the engine can render itself offline and measure the result. In the browser console:
+
+```js
+await AudioEngine.selfTest()
+```
+
+It returns peak, RMS and brightness for the music in seven game states and for every effect. Current targets: music around -28 dB RMS with peaks under -11 dB, interface ticks around -22 dB peak, big moments up to -6 dB.
 
 ---
 

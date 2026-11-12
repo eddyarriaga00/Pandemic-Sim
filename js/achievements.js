@@ -51,6 +51,7 @@ const Achievements = (() => {
     got[a.id] = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(got)); } catch {}
     UI.toast(`Achievement unlocked: ${a.name}`, 'dna');
+    AudioEngine.sfxAchievement();
     UI.buzz(15);
   }
 

@@ -58,6 +58,7 @@ const Evolution = (() => {
   }
 
   function close() {
+    if (isOpen()) AudioEngine.sfxEvoClose();
     document.getElementById('modal-evolution').classList.add('hidden');
     document.body.classList.remove('evo-open');
   }
@@ -117,7 +118,6 @@ const Evolution = (() => {
       card.addEventListener('click', () => {
         const result = Game.useOperation(card.dataset.op);
         if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? 'Not enough DNA' : result.msg, 'red');
-        else AudioEngine.sfxTraitPurchase();
         renderOps();
       });
     });

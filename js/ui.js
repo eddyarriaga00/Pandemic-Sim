@@ -40,6 +40,7 @@ const UI = (() => {
     el.classList.remove('hidden');
     el.classList.add('active');
     el.style.display = 'flex';
+    AudioEngine.setScreen(id);
     // GSAP fade-in if available
     if (typeof gsap !== 'undefined') {
       gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: 'power2.out' });
@@ -188,6 +189,7 @@ const UI = (() => {
     if (typeof AudioEngine !== 'undefined') {
       if (type === 'alert') AudioEngine.sfxAlert();
       else if (type === 'cure') AudioEngine.sfxCure();
+      else if (type === 'warn') AudioEngine.sfxWarn();
     }
     const t = document.createElement('div');
     const typeClass = {
@@ -395,6 +397,7 @@ const UI = (() => {
     if (!btn) return;
     btn.innerHTML = icon(paused ? 'play' : 'pause');
     btn.classList.toggle('active', paused);
+    AudioEngine.setState({ paused }); // the score goes muffled while time is stopped
   }
   function syncPauseButton() { setPauseIcon(Game.getState().paused); }
 
@@ -845,7 +848,12 @@ const UI = (() => {
 
         // Feed cure progress into audio tension system
         if (_topCountriesFrames === 30 && typeof AudioEngine !== 'undefined') {
-          AudioEngine.setTension(gs.cureProgress / 100);
+          AudioEngine.setState({
+            infected: gs.totalPop ? gs.totalInfected / gs.totalPop : 0,
+            dead:     gs.totalPop ? gs.totalDead / gs.totalPop : 0,
+            cure:     gs.cureProgress / 100,
+            detected: gs.cureActive,
+          });
         }
 
         // Cure bar urgency pulse when >80%

@@ -718,7 +718,7 @@ const WorldMap = (() => {
         event.stopPropagation();
         const val = Game.collectBubble(d.id);
         if (!val) return;
-        if (typeof AudioEngine !== 'undefined') AudioEngine.sfxDNA();
+        AudioEngine.sfxBubble();
 
         const c = centroids[d.iso];
         if (c && epicenterLayer) {

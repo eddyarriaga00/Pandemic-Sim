@@ -249,6 +249,16 @@ The rest is biology.
       document.getElementById('modal-howto').classList.add('hidden');
   });
 
+  // ─── SOUND ON EVERY CONTROL ───────────────────
+  // Browsers only allow audio after a tap or click, so the first one also
+  // starts the score.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('button, .type-card, .country-row, .dna-display')) return;
+    AudioEngine.startMusic();
+    _syncMusicBtn();
+    AudioEngine.sfxClick();
+  }, true);
+
   // ─── ACHIEVEMENTS ─────────────────────────────
   function refreshAchievements() {
     document.getElementById('ach-count').textContent = Achievements.count();
@@ -664,9 +674,10 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         <span class="dl-chips">${optionChips(o, gs.cureActive)}</span>
       </button>`).join('');
     if (!gs.paused) { pausedForDilemma = true; Game.setPaused(true); }
+    UI.syncPauseButton();
     dilemmaModal.classList.remove('hidden');
     document.body.classList.add('pm-open'); // toasts and news cards wait
-    AudioEngine.sfxNewsAlert();
+    AudioEngine.sfxDecision();
   }
 
   function closeDilemma() {
@@ -859,11 +870,15 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       case 'events':
         UI.updateDock();
         break;
+      case 'synergy':
+        AudioEngine.sfxSynergy();
+        break;
       case 'dilemma':
         UI.buzz(25);
         showDilemma();
         break;
       case 'ops':
+        AudioEngine.sfxOperation();
         UI.updateDnaDisplay();
         UI.checkEvoAvailable();
         break;
@@ -881,7 +896,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         if (d.won) UI.buzz([40, 60, 40]);
         // After the end screen has recorded the win, so 'all six types' can see it
         setTimeout(() => { Achievements.onEnd(gs, d.won, d.reason); refreshAchievements(); }, 1600);
-        d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
+        d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose(d.reason);
         Events.cleanup();
         NewsPopup.reset();
         setTimeout(() => UI.showGameOver(d.won, gs, d.reason), 1200);
