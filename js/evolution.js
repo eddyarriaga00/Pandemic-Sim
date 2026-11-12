@@ -104,64 +104,115 @@ const Evolution = (() => {
     });
   }
 
+  // One trait card. `gs` is the game state.
+  function buildCard(trait, gs) {
+    const owned  = gs.traits.has(trait.id);
+    const locked = !trait.requires.every(r => gs.traits.has(r));
+    const afford = gs.dna >= trait.cost;
+    const free   = gs.freeTraits.has(trait.id);
+
+    const card = document.createElement('div');
+    card.className = `trait-card${owned ? ' owned' : ''}${locked ? ' locked' : ''}${!owned && !locked && afford ? ' buyable' : ''}`;
+
+    const effArr = [];
+    const e = trait.effects || {};
+    const fmtEff = (v, label) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}% ${label}`;
+    if (e.infectivity) effArr.push(fmtEff(e.infectivity, 'inf'));
+    if (e.severity)    effArr.push(fmtEff(e.severity,    'sev'));
+    if (e.lethality)   effArr.push(fmtEff(e.lethality,   'leth'));
+    if (e.cureResist)  effArr.push(fmtEff(e.cureResist,  'resist'));
+    for (const k in (trait.mods || {})) {
+      const label = MOD_LABELS[k];
+      if (label) effArr.push(label(trait.mods[k]));
+    }
+
+    card.innerHTML = `
+      <span class="trait-icon">${trait.icon}</span>
+      <div class="trait-name">${trait.name}</div>
+      <div class="trait-desc">${trait.desc}</div>
+      ${effArr.length ? `<div class="trait-effects">${effArr.join(' · ')}</div>` : ''}
+      <div class="trait-footer">
+        ${owned
+          ? `<span class="trait-owned-badge">${free ? '🧬 MUTATED' : '✓ EVOLVED'}</span>
+             <button class="trait-devolve-btn" data-id="${trait.id}">↩ DEVOLVE${free ? '' : ` +${Math.max(1, Math.floor(trait.cost * 0.5))}`}</button>`
+          : locked
+            ? `<span class="trait-cost locked-cost">🔒 Needs ${trait.requires.filter(r => !gs.traits.has(r)).map(r => Game.findTrait(r)?.name || r).join(' + ')}</span>`
+            : `<span class="trait-cost ${afford ? '' : 'cant-afford'}">⚡ ${trait.cost} DNA</span>`
+        }
+      </div>
+    `;
+    if (!owned && !locked) card.addEventListener('click', () => purchase(trait.id));
+    return card;
+  }
+
+  // Group a tab's traits into chains: each root trait followed by everything
+  // that builds on it, arranged in columns by how many steps deep it is.
+  function chainsFor(traits) {
+    const inTab = new Set(traits.map(t => t.id));
+    const depth = {}, rootOf = {};
+    const resolve = t => {
+      if (depth[t.id]) return;
+      const reqs = t.requires.filter(r => inTab.has(r)).map(r => traits.find(x => x.id === r));
+      if (!reqs.length) { depth[t.id] = 1; rootOf[t.id] = t.id; return; }
+      reqs.forEach(resolve);
+      depth[t.id]  = 1 + Math.max(...reqs.map(r => depth[r.id]));
+      rootOf[t.id] = rootOf[reqs[0].id];
+    };
+    traits.forEach(resolve);
+    const chains = [];
+    for (const root of traits.filter(t => depth[t.id] === 1)) {
+      const members = traits.filter(t => rootOf[t.id] === root.id);
+      const cols = [];
+      for (const t of members) (cols[depth[t.id] - 1] = cols[depth[t.id] - 1] || []).push(t);
+      chains.push({ root, cols });
+    }
+    return chains;
+  }
+
   function renderTab(tab) {
     if (tab === 'operations') return renderOps();
     const container = document.getElementById(`tree-${tab}`);
     if (!container) return;
 
     const gs     = Game.getState();
-    const traits = EVOLUTION_TREE[tab];
-
+    const chains = chainsFor(EVOLUTION_TREE[tab]);
+    container.className = 'trait-lanes';
     container.innerHTML = '';
 
-    for (const trait of traits) {
-      const owned   = gs.traits.has(trait.id);
-      const reqsMet = trait.requires.every(r => gs.traits.has(r));
-      const locked  = !reqsMet;
-      const afford  = gs.dna >= trait.cost;
+    // Real chains first, drawn as left-to-right paths
+    for (const { root, cols } of chains.filter(c => c.cols.length > 1)) {
+      const lane = document.createElement('div');
+      lane.className = 'lane';
+      lane.innerHTML = `<div class="lane-title">${root.name.replace(/ 1$/, '')}</div>`;
+      const track = document.createElement('div');
+      track.className = 'lane-track';
+      cols.forEach((col, i) => {
+        if (i > 0) {
+          const link = document.createElement('div');
+          // The path is lit once the step before it has been taken
+          link.className = 'lane-link' + (cols[i - 1].some(t => gs.traits.has(t.id)) ? ' open' : '');
+          track.appendChild(link);
+        }
+        const column = document.createElement('div');
+        column.className = 'lane-col';
+        col.forEach(t => column.appendChild(buildCard(t, gs)));
+        track.appendChild(column);
+      });
+      lane.appendChild(track);
+      container.appendChild(lane);
+    }
 
-      const card = document.createElement('div');
-      card.className = `trait-card${owned ? ' owned' : ''}${locked ? ' locked' : ''}`;
-
-      // Build effects preview string (handle negative values cleanly)
-      const effArr = [];
-      const e = trait.effects || {};
-      const fmtEff = (v, label) => {
-        if (!v) return null;
-        const sign = v > 0 ? '+' : '';
-        return `${sign}${(v * 100).toFixed(0)}% ${label}`;
-      };
-      if (e.infectivity != null && e.infectivity !== 0) effArr.push(fmtEff(e.infectivity, 'inf'));
-      if (e.severity    != null && e.severity    !== 0) effArr.push(fmtEff(e.severity,    'sev'));
-      if (e.lethality   != null && e.lethality   !== 0) effArr.push(fmtEff(e.lethality,   'leth'));
-      if (e.cureResist  != null && e.cureResist  !== 0) effArr.push(fmtEff(e.cureResist,  'resist'));
-      for (const k in (trait.mods || {})) {
-        const label = MOD_LABELS[k];
-        if (label) effArr.push(typeof label === 'function' ? label(trait.mods[k]) : label);
-      }
-      const free = gs.freeTraits.has(trait.id);
-
-      card.innerHTML = `
-        <span class="trait-icon">${trait.icon}</span>
-        <div class="trait-name">${trait.name}</div>
-        <div class="trait-desc">${trait.desc}</div>
-        ${effArr.length ? `<div class="trait-effects">${effArr.join(' · ')}</div>` : ''}
-        <div class="trait-footer">
-          ${owned
-            ? `<span class="trait-owned-badge">${free ? '🧬 MUTATED' : '✓ EVOLVED'}</span>
-               <button class="trait-devolve-btn" data-id="${trait.id}">↩ DEVOLVE${free ? '' : ` +${Math.max(1, Math.floor(trait.cost * 0.5))}`}</button>`
-            : locked
-              ? `<span class="trait-cost locked-cost">🔒 Req: ${trait.requires.map(r => Game.findTrait(r)?.name || r).join(' + ')}</span>`
-              : `<span class="trait-cost ${afford ? '' : 'cant-afford'}">⚡ ${trait.cost} DNA</span>`
-          }
-        </div>
-      `;
-
-      if (!owned && !locked) {
-        card.addEventListener('click', () => purchase(trait.id));
-      }
-
-      container.appendChild(card);
+    // Then the traits nothing else depends on
+    const singles = chains.filter(c => c.cols.length === 1);
+    if (singles.length) {
+      const lane = document.createElement('div');
+      lane.className = 'lane';
+      lane.innerHTML = '<div class="lane-title">Standalone</div>';
+      const grid = document.createElement('div');
+      grid.className = 'trait-grid';
+      singles.forEach(c => grid.appendChild(buildCard(c.root, gs)));
+      lane.appendChild(grid);
+      container.appendChild(lane);
     }
 
     // Wire devolve buttons

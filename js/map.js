@@ -90,6 +90,7 @@ const WorldMap = (() => {
         _currentZoom = transform;
         g.attr('transform', transform);
         applyLabelZoom(transform.k);
+        scheduleDots();
         if (bubbleLayer) bubbleLayer.selectAll('.dna-bubble').attr('transform', bubbleTransform);
         // Government icons only make sense once you can tell countries apart
         if (govIconLayer) {
@@ -106,6 +107,7 @@ const WorldMap = (() => {
     svg.call(zoomBehavior);
     svg.on('dblclick.zoom', null);
     fitZoom(W, H);
+    sizeDotCanvas(W, H);
 
     addDefs();
 
@@ -258,6 +260,7 @@ const WorldMap = (() => {
     });
 
     computeCentroids(countries.features);
+    buildPoints(countries.features);
 
     // Layers (order matters — bottom to top)
     centroidLayer  = g.append('g').attr('class', 'centroid-layer');
@@ -625,13 +628,13 @@ const WorldMap = (() => {
       const color   = colorFor(c);
       const deadPct = c.dead / c.pop;
       const infPct  = (c.infected + c.dead) / c.pop;
-      const filter  = !LOW_FX && (deadPct > 0.12 || infPct > 0.35) ? 'url(#inf-glow)' : null;
+      const filter  = null; // the point layer carries the glow now
 
       if (_prevColors[c.iso] !== color)   { el.attr('fill', color);   _prevColors[c.iso]  = color; }
       if (_prevFilters[c.iso] !== filter) { el.attr('filter', filter); _prevFilters[c.iso] = filter; }
     }
 
-    if (_colorUpdateCount % 3 === 0) updateInfectionDots();
+    scheduleDots();
     if (_colorUpdateCount % 4 === 0) updateBubbles();
     if (_colorUpdateCount % 6 === 0) updateGovIcons();
     if (_colorUpdateCount % 9 === 0) updateLabels();
@@ -696,43 +699,6 @@ const WorldMap = (() => {
       });
 
     sel.exit().transition().duration(300).style('opacity', 0).remove();
-  }
-
-  // ─── INFECTION DOTS ───────────────────────────
-  function updateInfectionDots() {
-    if (!centroidLayer) return;
-
-    const infected = Game.getAllCountries().filter(c => (c.infected + c.dead) > 0);
-
-    const dots = centroidLayer.selectAll('.inf-dot').data(infected, d => d.iso);
-
-    dots.enter()
-      .append('circle')
-      .attr('class', 'inf-dot')
-      .attr('pointer-events', 'none')
-      .attr('r', 0)
-      .merge(dots)
-      .attr('cx', d => centroids[d.iso]?.[0] ?? 0)
-      .attr('cy', d => centroids[d.iso]?.[1] ?? 0)
-      .attr('r',  d => {
-        const pct = (d.infected + d.dead) / d.pop;
-        return Math.max(1.5, Math.sqrt(Math.min(pct, 0.6)) * 10);
-      })
-      .attr('fill', d => {
-        const dead = d.dead / d.pop;
-        if (dead > 0.5) return 'rgba(50,0,0,0.85)';
-        if (dead > 0.2) return 'rgba(110,0,0,0.7)';
-        const inf = d.infected / d.pop;
-        if (inf > 0.35) return 'rgba(200,35,35,0.65)';
-        if (inf > 0.1)  return 'rgba(248,81,73,0.5)';
-        return 'rgba(248,81,73,0.3)';
-      })
-      .attr('filter', d => {
-        const pct = (d.infected + d.dead) / d.pop;
-        return !LOW_FX && pct > 0.15 ? 'url(#dot-glow)' : null;
-      });
-
-    dots.exit().transition().duration(600).attr('r', 0).remove();
   }
 
   // ─── DNA BUBBLES ──────────────────────────────
@@ -841,6 +807,7 @@ const WorldMap = (() => {
   // ─── EPICENTER ────────────────────────────────
   function setOrigin(iso) {
     originIso = iso;
+    if (dotPoints[iso] && centroids[iso]) orderPoints(iso, centroids[iso]);
     if (!epicenterLayer || !centroids[iso]) return;
     epicenterLayer.selectAll('*').remove();
     if (epicenterTimer) clearInterval(epicenterTimer);
@@ -892,17 +859,125 @@ const WorldMap = (() => {
   }
 
   // ─── COLOR MAPPING ────────────────────────────
+  // The land itself only takes a tint: a dull red as infection saturates a
+  // country, fading to near-black as it dies. The bright detail is the
+  // point layer drawn on top. Quantised so the DOM isn't touched every step.
+  const tintScale = d3.interpolateRgb(C.healthy, '#4d170a');
   function colorFor(c) {
-    if (!c.reached) return C.healthy;
-    const deadPct = c.dead / c.pop;
-    const infPct  = (c.infected + c.dead) / c.pop;
-    if (deadPct > 0.70) return C.d1;
-    if (deadPct > 0.30) return C.d0;
-    if (infPct  < 0.001) return C.i0;
-    if (infPct  < 0.05)  return C.i1;
-    if (infPct  < 0.20)  return C.i2;
-    if (infPct  < 0.50)  return C.i3;
-    return C.i4;
+    if (!c.reached && !c.infected) return C.healthy;
+    const affected = Math.min(1, (c.infected + c.dead) / c.pop);
+    const dead     = Math.min(1, c.dead / c.pop);
+    const a = Math.max(1, Math.round(Math.pow(affected, 0.45) * 16)) / 16;
+    let col = tintScale(a);
+    if (dead > 0.02) col = d3.interpolateRgb(col, '#050203')(Math.round(Math.min(1, dead * 1.15) * 12) / 12);
+    return col;
+  }
+
+  // ─── INFECTION POINTS ─────────────────────────
+  // Every country gets a fixed scatter of points inside its borders (more
+  // for bigger populations). They light up in order of distance from where
+  // the pathogen entered, so you watch it cross the country, and turn to
+  // ash as people die. Drawn on a canvas because there are thousands.
+  let dotCanvas = null, dotCtx = null, dotFrame = 0;
+  let dotPoints = {}; // iso -> { pts: [[x, y], ...], shown }
+
+  function buildPoints(features) {
+    dotPoints = {};
+    const probe = document.createElement('canvas').getContext('2d');
+    for (const f of features) {
+      const iso = parseInt(f.id);
+      const c   = Game.getCountry(iso);
+      const d   = c && pathGen(f);
+      if (!d) continue;
+      const shape = new Path2D(d);
+      const [[x0, y0], [x1, y1]] = pathGen.bounds(f);
+      const want = Math.max(5, Math.min(LOW_FX ? 80 : 110, Math.round(Math.sqrt(c.pop / 1e6) * 3)));
+      let s = iso * 9301 + 49297; // fixed per country, so the pattern survives a resize
+      const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff;
+      const pts = [];
+      for (let tries = 0; pts.length < want && tries < want * 60; tries++) {
+        const x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0);
+        if (probe.isPointInPath(shape, x, y)) pts.push([x, y]);
+      }
+      if (!pts.length && centroids[iso]) pts.push(centroids[iso]);
+      dotPoints[iso] = { pts, shown: 0 };
+      orderPoints(iso, centroids[iso]);
+    }
+  }
+
+  function orderPoints(iso, from) {
+    const dp = dotPoints[iso];
+    if (!dp || !from) return;
+    const d2 = p => (p[0] - from[0]) ** 2 + (p[1] - from[1]) ** 2;
+    dp.pts.sort((a, b) => d2(a) - d2(b));
+  }
+
+  // Where the pathogen came in decides which side of the country lights up first.
+  function setEntry(iso, srcIso, method) {
+    const dp = dotPoints[iso];
+    if (!dp) return;
+    if (method === 'air travel' || srcIso == null || !centroids[srcIso]) {
+      orderPoints(iso, dp.pts[(iso * 7) % dp.pts.length]); // a city somewhere inside
+    } else {
+      orderPoints(iso, centroids[srcIso]);                 // the border facing the source
+    }
+    dp.shown = 0;
+    scheduleDots();
+  }
+
+  function sizeDotCanvas(W, H) {
+    dotCanvas = dotCanvas || document.getElementById('particle-canvas');
+    if (!dotCanvas) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    dotCanvas.width = W * dpr; dotCanvas.height = H * dpr;
+    dotCanvas.style.width = W + 'px'; dotCanvas.style.height = H + 'px';
+    dotCtx = dotCanvas.getContext('2d');
+    dotCtx.dpr = dpr;
+  }
+
+  function scheduleDots() {
+    if (!dotFrame) dotFrame = requestAnimationFrame(drawDots);
+  }
+
+  function drawDots() {
+    dotFrame = 0;
+    if (!dotCtx) return;
+    const ctx = dotCtx, t = _currentZoom, dpr = ctx.dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, dotCanvas.width, dotCanvas.height);
+    ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
+
+    // Points grow a little as you zoom in, but far slower than the map does
+    const r = 1.7 * Math.max(0.7, Math.min(1.2, baseScale / 129)) / Math.pow(t.k, 0.72);
+    const live = new Path2D(), glow = new Path2D(), ash = new Path2D();
+    let growing = false;
+
+    for (const c of Game.getAllCountries()) {
+      const dp = dotPoints[c.iso];
+      if (!dp) continue;
+      const affected = (c.infected + c.dead) / c.pop;
+      if (affected <= 0) { dp.shown = 0; continue; }
+      const n      = dp.pts.length;
+      const target = Math.min(n, Math.max(1, Math.round(n * Math.pow(affected, 0.42))));
+      const dead   = Math.min(target, Math.round(n * Math.pow(c.dead / c.pop, 0.6)));
+      // Ease toward the target so new points arrive a few at a time
+      if (dp.shown < target) { dp.shown = Math.min(target, dp.shown + Math.max(1, Math.ceil((target - dp.shown) * 0.2))); growing = growing || dp.shown < target; }
+      else dp.shown = target;
+
+      for (let i = 0; i < dp.shown; i++) {
+        const [x, y] = dp.pts[i];
+        if (i < dead) { ash.moveTo(x + r * 0.8, y); ash.arc(x, y, r * 0.8, 0, 6.2832); }
+        else {
+          live.moveTo(x + r, y); live.arc(x, y, r, 0, 6.2832);
+          if (!LOW_FX) { glow.moveTo(x + r * 2.8, y); glow.arc(x, y, r * 2.8, 0, 6.2832); }
+        }
+      }
+    }
+    ctx.fillStyle = 'rgba(132,118,112,0.6)'; ctx.fill(ash);
+    if (!LOW_FX) { ctx.fillStyle = 'rgba(255,70,40,0.13)'; ctx.fill(glow); }
+    ctx.fillStyle = 'rgba(255,96,64,0.95)'; ctx.fill(live);
+
+    if (growing) scheduleDots();
   }
 
   // ─── PULSE (new country infected) ─────────────
@@ -1047,6 +1122,7 @@ const WorldMap = (() => {
     fitProjection(W, H);
     pathGen = d3.geoPath().projection(projection);
     fitZoom(W, H);
+    sizeDotCanvas(W, H);
     svg.call(zoomBehavior.transform, d3.zoomIdentity);
 
     g.selectAll('.country-path').attr('d', pathGen);
@@ -1054,7 +1130,10 @@ const WorldMap = (() => {
     g.select('.border-mesh').attr('d', pathGen);
 
     if (worldTopo) {
-      computeCentroids(topojson.feature(worldTopo, worldTopo.objects.countries).features);
+      const feats = topojson.feature(worldTopo, worldTopo.objects.countries).features;
+      computeCentroids(feats);
+      buildPoints(feats);
+      scheduleDots();
       if (centroidLayer) {
         centroidLayer.selectAll('.inf-dot')
           .attr('cx', d => centroids[d.iso]?.[0] ?? 0)
@@ -1093,6 +1172,8 @@ const WorldMap = (() => {
       delete _prevFilters[iso];
     }
     updateLabels();
+    for (const iso in dotPoints) { dotPoints[iso].shown = 0; orderPoints(+iso, centroids[iso]); }
+    scheduleDots();
     svg.interrupt().call(zoomBehavior.transform, d3.zoomIdentity);
   }
 
@@ -1109,7 +1190,7 @@ const WorldMap = (() => {
 
   return {
     load, updateColors, pulseCountry, highlightCountry,
-    zoomToCountry, resetZoom, resize, reset, updateGovIcons,
+    zoomToCountry, resetZoom, resize, reset, updateGovIcons, setEntry,
     focusCountry: iso => { const c = Game.getCountry(iso); if (c) selectCountry(iso, c); },
     setOrigin, colorFor, isReady: () => mapInitialized,
     setPick, showTravelRoute,

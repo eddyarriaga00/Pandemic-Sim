@@ -422,6 +422,14 @@ const UI = (() => {
 
     const scoreEl = document.getElementById('gameover-score-label');
     const gradeEl = document.getElementById('gameover-grade');
+    let finalScore = 0, finalGrade = 'F';
+
+    // Timeline of the run's turning points
+    const tl = document.getElementById('go-timeline');
+    if (tl) {
+      tl.innerHTML = gs.log.slice().sort((a, b) => a.day - b.day).map(e =>
+        `<div class="tl-row"><span class="tl-day">DAY ${e.day}</span><span class="tl-text">${e.text}</span></div>`).join('');
+    }
 
     if (won) {
       const diffBonus = { mild: 0.7, standard: 1, severe: 1.4, extinction: 2 }[gs.difficulty] || 1;
@@ -431,7 +439,8 @@ const UI = (() => {
       const grade = score > 15000 ? 'S' : score > 10000 ? 'A' : score > 6000 ? 'B' : 'C';
       gradeEl.textContent = grade;
       gradeEl.style.color = { S: '#ffdd00', A: '#00ff41', B: '#ff8c00', C: '#aaaaaa' }[grade];
-      if (Records.save(gs, score, grade)) scoreEl.textContent += '  ★ NEW BEST';
+      finalScore = score; finalGrade = grade;
+      if (gs.mode !== 'daily' && Records.save(gs, score, grade)) scoreEl.textContent += '  ★ NEW BEST';
     } else {
       scoreEl.textContent = `HUMANITY SURVIVES: ${fmt(gs.totalHealthy)} ALIVE`;
       scoreEl.style.color = '#00aaff';
@@ -439,10 +448,38 @@ const UI = (() => {
       gradeEl.style.color = '#00aaff';
     }
 
+    _lastResult = {
+      won, reason, score: finalScore, grade: finalGrade, days: gs.day,
+      dead: gs.totalDead, alive: gs.totalHealthy, cure: gs.cureProgress,
+      name: gs.diseaseName, type: DISEASE_TYPES[gs.diseaseType].name,
+      difficulty: DIFFICULTIES[gs.difficulty].name, daily: gs.mode === 'daily' ? gs.dailyDate : null,
+    };
+    if (gs.mode === 'daily') {
+      Records.saveDaily(gs.dailyDate, { won: won ? 1 : 0, score: finalScore, grade: finalGrade, days: gs.day });
+    }
+
     clearToasts();
     showScreen('screen-gameover');
     // Render epidemic curve with Chart.js
     setTimeout(() => renderEpidemicChart(won), 200);
+  }
+
+  // A few lines of plain text describing the last finished run.
+  let _lastResult = null;
+  function resultText() {
+    const r = _lastResult;
+    if (!r) return '';
+    const outcome = r.won
+      ? `☣ Wiped out humanity in ${r.days} days · Grade ${r.grade}`
+      : r.reason === 'burnout'
+        ? `🕯 Burned out on day ${r.days} with ${fmt(r.alive)} people untouched`
+        : `🔬 Cured on day ${r.days} · ${fmt(r.dead)} dead`;
+    return [
+      r.daily ? `PATHOGEN · Daily Outbreak ${r.daily}` : `PATHOGEN · ${r.name}`,
+      `${r.type} · ${r.difficulty}`,
+      outcome,
+      location.origin + location.pathname,
+    ].join('\n');
   }
 
   let _chartInstance = null;
@@ -627,6 +664,7 @@ const UI = (() => {
     ['severityMask',     () => 'symptoms hidden'],
     ['climateBoost',     () => 'climate shift'],
   ];
+  const effectText = effect => EFFECT_TEXT.filter(([k]) => effect[k]).map(([k, f]) => f(effect[k]));
   const pretty = id => id.replace(/^op_/, '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 
   function updateDock() {
@@ -639,8 +677,8 @@ const UI = (() => {
     const list = document.getElementById('dock-events-list');
     if (list) {
       const html = gs.activeEvents.map(ev => {
-        const fx = EFFECT_TEXT.filter(([k]) => ev.effect[k]).map(([k, f]) => f(ev.effect[k])).join(' · ');
-        const mine = ev.id.startsWith('op_');
+        const fx = effectText(ev.effect).join(' · ');
+        const mine = ev.id.startsWith('op_') || ev.id.startsWith('choice_');
         return `<div class="dock-event${mine ? ' mine' : ''}">
           <span class="de-name">${ev.name || pretty(ev.id)}</span>
           <span class="de-fx">${fx}</span>
@@ -661,6 +699,16 @@ const UI = (() => {
   const Records = {
     all() { try { return JSON.parse(localStorage.getItem(RECORDS_KEY)) || {}; } catch { return {}; } },
     get(type, difficulty) { return this.all()[type + '|' + difficulty] || null; },
+    daily(date) { try { return (JSON.parse(localStorage.getItem('pathogen_daily_v1')) || {})[date] || null; } catch { return null; } },
+    // Keeps the best attempt of the day: a win beats a loss, then score.
+    saveDaily(date, result) {
+      let all = {};
+      try { all = JSON.parse(localStorage.getItem('pathogen_daily_v1')) || {}; } catch {}
+      const prev = all[date];
+      if (prev && (prev.won > result.won || (prev.won === result.won && prev.score >= result.score))) return;
+      all[date] = result;
+      try { localStorage.setItem('pathogen_daily_v1', JSON.stringify(all)); } catch {}
+    },
     // Returns true if this run beat the previous best.
     save(gs, score, grade) {
       const all = this.all(), key = gs.diseaseType + '|' + gs.difficulty;
@@ -811,6 +859,6 @@ const UI = (() => {
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
     flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton,
-    updateDock, Records, govSummary, trendFor,
+    updateDock, Records, effectText, resultText, govSummary, trendFor,
   };
 })();

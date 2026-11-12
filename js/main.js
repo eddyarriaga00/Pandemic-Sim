@@ -74,6 +74,7 @@
         hide();
         const gs = Game.getState();
         Events.cleanup();
+        if (gs.mode === 'daily') { startDaily(); return; }
         const name = document.getElementById('disease-name')?.value.trim() || gs.diseaseName;
         startNewGame(name, gs.diseaseType, gs.difficulty);
       });
@@ -137,6 +138,7 @@
   // ─── SPLASH ───────────────────────────────────
   // ─── SAVE GAME DETECTION ─────────────────────
   function refreshSaveButton() {
+    if (typeof refreshDailyButton === 'function') refreshDailyButton();
     const meta = Game.getSaveMeta();
     const btn = document.getElementById('btn-load-save');
     if (!btn) return;
@@ -163,6 +165,7 @@
     setSpeedButton(gs.speed);
     Game.setPaused(false);
     UI.toast(`💾 Loaded: ${gs.diseaseName}, day ${gs.day}`, 'info');
+    if (Game.getDilemma()) showDilemma();
   });
 
   document.getElementById('btn-start').addEventListener('click', () => {
@@ -383,8 +386,21 @@ The rest is biology.
   // ─── GAME OVER ────────────────────────────────
   document.getElementById('btn-play-again').addEventListener('click', () => {
     Events.cleanup();
+    if (Game.getState().mode === 'daily') { startDaily(); return; }
     const name = document.getElementById('disease-name').value.trim() || randName();
     startNewGame(name, selectedType, selectedDifficulty);
+  });
+
+  document.getElementById('btn-share').addEventListener('click', async e => {
+    const btn  = e.currentTarget;
+    const text = UI.resultText();
+    let done = false;
+    try {
+      if (navigator.share && window.matchMedia('(pointer: coarse)').matches) { await navigator.share({ text }); done = true; }
+      else { await navigator.clipboard.writeText(text); done = true; }
+    } catch { /* cancelled, or clipboard blocked */ }
+    btn.textContent = done ? '✓ COPIED' : 'COULD NOT COPY';
+    setTimeout(() => { btn.textContent = '⧉ SHARE RESULT'; }, 2000);
   });
 
   document.getElementById('btn-main-menu').addEventListener('click', () => {
@@ -544,19 +560,120 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   }
 
   // ─── INIT NEW GAME ────────────────────────────
-  async function startNewGame(name, type, difficulty) {
+  async function startNewGame(name, type, difficulty, extra) {
     Events.cleanup();
     UI.stopRenderLoop();
     NewsPopup.reset();
     removeOverlays();
     document.getElementById('briefing-overlay')?.remove();
 
-    Game.init({ name, type, difficulty });
+    closeDilemma();
+    Game.init({ name, type, difficulty, ...(extra || {}) });
     await enterGameScreen();
 
     await showDiseaseBriefing(type);
-    showOriginOverlay();
+    if (extra && extra.origin) {
+      // Daily outbreak: the starting country is part of the challenge
+      WorldMap.highlightCountry(extra.origin);
+      beginInfection(extra.origin);
+    } else {
+      showOriginOverlay();
+    }
   }
+
+  // ─── DAILY OUTBREAK ───────────────────────────
+  // One fixed setup per calendar day (UTC): same pathogen, same starting
+  // country and the same random seed for everyone who plays it.
+  function dailySpec() {
+    const date = new Date().toISOString().slice(0, 10);
+    let s = +date.replace(/-/g, '');
+    const next = () => (s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff;
+    next(); next();
+    const types   = Object.keys(DISEASE_TYPES);
+    // Big, not-rich countries only: every daily should be winnable
+    const origins = COUNTRIES_DATA.filter(c => c.pop >= 20e6 && c.wealth !== 'rich');
+    const type    = types[Math.floor(next() * types.length)];
+    const origin  = origins[Math.floor(next() * origins.length)];
+    return {
+      date, type, origin, difficulty: 'standard',
+      seed: Math.floor(next() * 2 ** 31),
+      name: 'Strain ' + date.slice(5).replace('-', '/'),
+    };
+  }
+
+  function refreshDailyButton() {
+    const spec = dailySpec();
+    const done = UI.Records.daily(spec.date);
+    const sub  = document.getElementById('daily-sub');
+    const what = `${DISEASE_TYPES[spec.type].name} · starts in ${spec.origin.name}`;
+    sub.textContent = !done ? what
+      : done.won ? `✓ Won in ${done.days} days, grade ${done.grade} · play again`
+                 : `✗ Lost on day ${done.days} · try again`;
+    document.getElementById('btn-daily').classList.toggle('done', !!(done && done.won));
+  }
+  refreshDailyButton();
+
+  function startDaily() {
+    const spec = dailySpec();
+    AudioEngine.init();
+    AudioEngine.startMusic();
+    _syncMusicBtn();
+    startNewGame(spec.name, spec.type, spec.difficulty,
+      { seed: spec.seed, mode: 'daily', dailyDate: spec.date, origin: spec.origin.iso });
+  }
+  document.getElementById('btn-daily').addEventListener('click', startDaily);
+
+  // ─── DILEMMAS ─────────────────────────────────
+  const dilemmaModal = document.getElementById('modal-dilemma');
+  let pausedForDilemma = false;
+
+  function optionChips(o, cureActive) {
+    const chips = [];
+    if (o.dna)    chips.push([`${o.dna > 0 ? '+' : ''}${o.dna} DNA`, o.dna > 0 ? 'good' : 'bad']);
+    if (o.detect) chips.push(cureActive
+      ? [`cure ${o.detect > 0 ? '+' : ''}${Math.round(o.detect * 10)}%`, o.detect > 0 ? 'bad' : 'good']
+      : [`detection ${o.detect > 0 ? '+' : ''}${Math.round(o.detect * 100)}%`, o.detect > 0 ? 'bad' : 'good']);
+    if (o.cure)   chips.push([`cure ${o.cure > 0 ? '+' : ''}${o.cure}%`, o.cure > 0 ? 'bad' : 'good']);
+    if (o.seed)   chips.push([`+${o.seed} country`, 'good']);
+    if (o.mutate) chips.push(['random symptom', 'bad']);
+    if (o.boost)  chips.push([`${UI.effectText(o.boost).join(', ')} · ${o.boost.days}d`, 'neutral']);
+    return chips.map(([t, c]) => `<span class="dl-chip ${c}">${t}</span>`).join('');
+  }
+
+  function showDilemma() {
+    const d = Game.getDilemma();
+    if (!d) return;
+    const gs = Game.getState();
+    Evolution.close();
+    document.getElementById('dl-day').textContent   = gs.day;
+    document.getElementById('dl-icon').textContent  = d.icon;
+    document.getElementById('dl-title').textContent = d.title;
+    document.getElementById('dl-text').textContent  = d.text;
+    document.getElementById('dl-options').innerHTML = d.options.map((o, i) => `
+      <button class="dl-option" data-i="${i}" ${o.affordable ? '' : 'disabled'}>
+        <span class="dl-label">${o.label}</span>
+        <span class="dl-note">${o.affordable ? o.note : 'Not enough DNA'}</span>
+        <span class="dl-chips">${optionChips(o, gs.cureActive)}</span>
+      </button>`).join('');
+    if (!gs.paused) { pausedForDilemma = true; Game.setPaused(true); }
+    dilemmaModal.classList.remove('hidden');
+    document.body.classList.add('pm-open'); // toasts and news cards wait
+    AudioEngine.sfxNewsAlert();
+  }
+
+  function closeDilemma() {
+    if (dilemmaModal.classList.contains('hidden')) return;
+    dilemmaModal.classList.add('hidden');
+    document.body.classList.remove('pm-open');
+    if (pausedForDilemma) { pausedForDilemma = false; Game.setPaused(false); }
+    UI.syncPauseButton();
+  }
+
+  document.getElementById('dl-options').addEventListener('click', e => {
+    const btn = e.target.closest('.dl-option');
+    if (!btn || btn.disabled) return;
+    if (Game.resolveDilemma(+btn.dataset.i).ok) { AudioEngine.sfxTraitPurchase(); closeDilemma(); }
+  });
 
   // ─── ORIGIN PICKER OVERLAY ────────────────────
   function showOriginOverlay() {
@@ -709,6 +826,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       case 'country':
         AudioEngine.sfxNewCountry();
         WorldMap.pulseCountry(d.iso);
+        WorldMap.setEntry(d.iso, d.srcIso, d.method);
         if (d.srcIso != null) WorldMap.showTravelRoute(d.srcIso, d.iso, d.method);
         break;
       case 'news':
@@ -731,6 +849,9 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       case 'events':
         UI.updateDock();
         break;
+      case 'dilemma':
+        showDilemma();
+        break;
       case 'ops':
         UI.updateDnaDisplay();
         UI.checkEvoAvailable();
@@ -743,6 +864,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         NewsPopup.check(d.day);
         break;
       case 'end':
+        closeDilemma();
         d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
         Events.cleanup();
         NewsPopup.reset();
@@ -812,6 +934,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   document.addEventListener('keydown', e => {
     const gs = Game.getState();
     if (gs.phase !== 'spreading') return;
+    if (!dilemmaModal.classList.contains('hidden')) return; // a decision is pending
     if (e.key === ' ') {
       e.preventDefault();
       document.getElementById('btn-pause').click();

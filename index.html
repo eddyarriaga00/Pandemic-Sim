@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=10">
+  <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 
@@ -44,6 +44,10 @@
       </div>
       <button class="btn-primary pulse-btn" id="btn-start">☣ INITIATE OUTBREAK</button>
       <button class="btn-secondary btn-load-save hidden" id="btn-load-save">💾 CONTINUE SAVED GAME</button>
+      <button class="btn-secondary btn-daily" id="btn-daily">
+        <span class="daily-title">📅 DAILY OUTBREAK</span>
+        <span class="daily-sub" id="daily-sub"></span>
+      </button>
       <div class="splash-secondary-btns">
         <button class="btn-secondary" id="btn-how-to-play">HOW TO PLAY</button>
         <button class="btn-secondary" id="btn-settings">⚙ SETTINGS</button>
@@ -83,6 +87,10 @@
         <div class="howto-section">
           <h3>🔬 DETECTION &amp; CURE</h3>
           <p>Visible symptoms and deaths fill the detection meter. Once identified, research begins and governments start closing routes. Dead and sick researchers cure nothing.</p>
+        </div>
+        <div class="howto-section">
+          <h3>⚖ DECISIONS</h3>
+          <p>Every month or two the game stops and puts a choice to you. Both options cost something: DNA, attention, or control over what your pathogen becomes.</p>
         </div>
         <div class="howto-section">
           <h3>🎯 OPERATIONS</h3>
@@ -290,10 +298,9 @@
       <div class="map-scanlines"></div>
       <div class="map-vignette"></div>
       <svg id="world-map"></svg>
+      <canvas id="particle-canvas"></canvas>
     </div>
 
-    <!-- INFECTION SPREAD PARTICLES (canvas overlay) -->
-    <canvas id="particle-canvas"></canvas>
 
     <!-- PAUSE MENU -->
     <div id="pause-menu" class="pause-menu hidden">
@@ -456,6 +463,19 @@
 
   </div>
 
+  <!-- ═══════════════════════════════════════ DILEMMA -->
+  <div id="modal-dilemma" class="modal hidden">
+    <div class="modal-content dilemma-modal">
+      <div class="dl-kicker">DECISION · DAY <span id="dl-day">0</span></div>
+      <div class="dl-head">
+        <span class="dl-icon" id="dl-icon"></span>
+        <h2 id="dl-title"></h2>
+      </div>
+      <p class="dl-text" id="dl-text"></p>
+      <div class="dl-options" id="dl-options"></div>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════ COUNTRY LIST (origin picker) -->
   <div id="modal-countries" class="modal hidden">
     <div class="modal-content countries-modal">
@@ -574,12 +594,18 @@
         <div class="go-stat"><span>DNA Spent</span><span id="go-dna-spent">0</span></div>
       </div>
 
+      <div class="go-timeline-wrap">
+        <div class="go-chart-label">HOW IT HAPPENED</div>
+        <div class="go-timeline" id="go-timeline"></div>
+      </div>
+
       <div class="score-block" id="score-block">
         <div class="score-label" id="gameover-score-label"></div>
         <div class="score-grade" id="gameover-grade"></div>
       </div>
 
       <button class="btn-primary" id="btn-play-again">↺ PLAY AGAIN</button>
+      <button class="btn-secondary" id="btn-share">⧉ SHARE RESULT</button>
       <button class="btn-secondary" id="btn-main-menu">MAIN MENU</button>
     </div>
   </div>
@@ -593,14 +619,14 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=10"></script>
-  <script src="js/game.js?v=10"></script>
-  <script src="js/map.js?v=10"></script>
-  <script src="js/evolution.js?v=10"></script>
-  <script src="js/ui.js?v=10"></script>
-  <script src="js/events.js?v=10"></script>
-  <script src="js/audio.js?v=10"></script>
-  <script src="js/news-popup.js?v=10"></script>
-  <script src="js/main.js?v=10"></script>
+  <script src="js/data.js?v=11"></script>
+  <script src="js/game.js?v=11"></script>
+  <script src="js/map.js?v=11"></script>
+  <script src="js/evolution.js?v=11"></script>
+  <script src="js/ui.js?v=11"></script>
+  <script src="js/events.js?v=11"></script>
+  <script src="js/audio.js?v=11"></script>
+  <script src="js/news-popup.js?v=11"></script>
+  <script src="js/main.js?v=11"></script>
 </body>
 </html>

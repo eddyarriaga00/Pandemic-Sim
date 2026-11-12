@@ -30,7 +30,7 @@ const Game = (() => {
     deathPerLeth: 0.06,                    // daily death rate of the infected at lethality 1
     collapseDeathMult: 4,                  // deaths speed up as a country's dead share grows
     detectThreshold: 150000,               // "noticed cases" needed before the world reacts
-    cureBase: 1.95,                        // % per day at full effort and priority
+    cureBase: 2.15,                        // % per day at full effort and priority
     cureDeployRate: 0.40,                  // share of infected cured per day once deployed
     land: 0.035, air: 0.010, sea: 0.007,   // daily export chances per route
     leak: 0.04,                            // how much gets through a closed route
@@ -59,6 +59,10 @@ const Game = (() => {
     peakInfected: 0, originIso: null,
     bubbles: [], nextBubbleId: 0,
     ops: {},      // id -> { readyDay, uses }
+    dilemma: null, nextDilemmaDay: 0, dilemmasSeen: [],
+    noticeBonus: 0,   // detection added or removed by the player's choices
+    log: [],          // { day, key, text }: the run's turning points
+    mode: 'standard', dailyDate: null,
     advice: { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 },
     seed: 1,
   };
@@ -180,9 +184,12 @@ const Game = (() => {
     state.peakInfected = 0; state.originIso = null;
     state.bubbles = []; state.nextBubbleId = 0;
     state.ops = {};
+    state.dilemma = null; state.dilemmasSeen = []; state.noticeBonus = 0; state.log = [];
+    state.mode = config.mode || 'standard'; state.dailyDate = config.dailyDate || null;
     state.advice = { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
     stepCount = 0; history = []; historyStride = 1; dirty = new Set();
     lastAutosaveDay = 0;
+    state.nextDilemmaDay = 30 + Math.floor(rand() * 15);
 
     for (const c of COUNTRIES_DATA) {
       state.countries[c.iso] = {
@@ -225,6 +232,7 @@ const Game = (() => {
     state.peakInfected = seed;
     state.phase = 'spreading';
     awardDna(3);
+    mark('start', `Patient zero in ${c.name}`);
     toast(`☣ ${state.diseaseName} emerges in ${c.name}`, 'info');
     startLoop();
   }
@@ -355,6 +363,8 @@ const Game = (() => {
     rollWorldEvent();
     if (state.day % 6 === 0) maybeSpawnBubble();
     if (state.day % 3 === 0) updateAdvice();
+    rollDilemma();
+    markMilestones();
     recordHistory();
     emit('day', { day: state.day });
     if (state.day - lastAutosaveDay >= AUTOSAVE_DAYS) { lastAutosaveDay = state.day; saveGame(); }
@@ -398,9 +408,10 @@ const Game = (() => {
 
   function updateDetection(notice) {
     if (state.cureActive) { state.detection = 1; return; }
-    state.detection = Math.min(1, notice / detectionThreshold());
+    state.detection = clamp(notice / detectionThreshold() + state.noticeBonus, 0, 1);
     if (state.detection >= 1) {
       state.cureActive = true;
+      mark('identified', 'Pathogen identified; cure research begins');
       toast(`🔬 ${state.diseaseName} has been identified. Cure research begins.`, 'cure');
       emit('cureStart');
       emit('news', { category: 'cure' });
@@ -431,6 +442,7 @@ const Game = (() => {
     state.cureProgress = Math.min(100, state.cureProgress + perDay * DT);
     if (state.cureProgress >= 100) {
       state.cureDeployed = true;
+      mark('deployed', 'Cure deployed worldwide');
       toast('💉 The cure is complete and being distributed worldwide.', 'cure');
       emit('news', { category: 'cure' });
     }
@@ -449,6 +461,7 @@ const Game = (() => {
       if (c.dead / c.pop > 0.5) { // nobody left to enforce anything
         c.collapsed = true;
         c.lockdown = false;
+        mark('collapse', `${c.name} is the first government to collapse`);
         emit('gov', { iso: c.iso, kind: 'collapse' });
         if (c.pop >= 50e6) toast(`🏚 Government of ${c.name} has collapsed`, 'alert');
         continue;
@@ -460,6 +473,7 @@ const Game = (() => {
           const wealthBias = c.wealth === 'rich' ? 1.5 : c.wealth === 'middle' ? 1 : 0.5;
           if (rand() < Math.min(0.05, worldPanic * 0.05) * diff.response * wealthBias) {
             c.airportClosed = true; c.portClosed = true;
+            mark('sealed', `${c.name} is the first to seal itself off`);
             emit('gov', { iso: c.iso, kind: 'sealed' });
             toast(`🚫 ${c.name} seals its airports and ports`, 'warn');
           }
@@ -473,6 +487,7 @@ const Game = (() => {
 
       if (!c.airportClosed && c.airports > 0 && alarm > thr) {
         c.airportClosed = true;
+        mark('airport', `${c.name} is the first to close its airports`);
         emit('gov', { iso: c.iso, kind: 'airports' });
         if (loud) toast(`✈️ ${c.name} closes its airports`, 'warn');
       }
@@ -486,6 +501,7 @@ const Game = (() => {
       }
       if (!c.lockdown && alarm > thr * 8) {
         c.lockdown = true;
+        mark('lockdown', `${c.name} orders the first national lockdown`);
         emit('gov', { iso: c.iso, kind: 'lockdown' });
         if (loud) toast(`🔒 ${c.name} enters national lockdown`, 'warn');
       }
@@ -574,6 +590,8 @@ const Game = (() => {
 
     dst.reached = true;
     state.countriesInfected++;
+    if (state.countriesInfected === 2) mark('second', `First spread abroad: ${dst.name}, via ${method}`);
+    if (state.countriesInfected === countryList.length) mark('everywhere', 'Every country on Earth infected');
     toast(`🌍 ${state.diseaseName} reaches ${dst.name} via ${method}`, 'info');
     emit('country', { iso: dst.iso, method, srcIso });
     emit('news', { category: 'spreading' });
@@ -586,15 +604,22 @@ const Game = (() => {
   function rollMutation() {
     const td = DISEASE_TYPES[state.diseaseType];
     if (!td.mutationRate || rand() >= td.mutationRate) return;
-    const options = EVOLUTION_TREE.symptoms.filter(t =>
-      !state.traits.has(t.id) && t.requires.every(r => state.traits.has(r)));
-    if (!options.length) return;
-    const t = options[Math.floor(rand() * options.length)];
+    const t = randomAvailableSymptom();
+    if (t) grantMutation(t);
+  }
+
+  function grantMutation(t) {
     state.traits.add(t.id);
     state.freeTraits.add(t.id);
     recomputeStats();
     toast(`🧬 ${state.diseaseName} mutated: ${t.name}`, 'dna');
     emit('traits', { mutated: t.id });
+  }
+
+  function randomAvailableSymptom() {
+    const options = EVOLUTION_TREE.symptoms.filter(t =>
+      !state.traits.has(t.id) && t.requires.every(r => state.traits.has(r)));
+    return options.length ? options[Math.floor(rand() * options.length)] : null;
   }
 
   // ─── WORLD EVENTS ─────────────────────────────
@@ -692,6 +717,88 @@ const Game = (() => {
     return { ok: true };
   }
 
+  // ─── DILEMMAS ─────────────────────────────────
+  const DILEMMA_BY_ID = {};
+  for (const d of DILEMMAS) DILEMMA_BY_ID[d.id] = d;
+
+  function rollDilemma() {
+    if (state.dilemma || state.cureDeployed || state.day < state.nextDilemmaDay) return;
+    let pool = DILEMMAS.filter(d => !state.dilemmasSeen.includes(d.id) && d.when(state));
+    if (!pool.length) { // seen them all: allow repeats
+      state.dilemmasSeen = [];
+      pool = DILEMMAS.filter(d => d.when(state));
+    }
+    if (!pool.length) return;
+    const d = pool[Math.floor(rand() * pool.length)];
+    state.dilemma = d.id;
+    state.dilemmasSeen.push(d.id);
+    emit('dilemma', { id: d.id });
+  }
+
+  function getDilemma() {
+    const d = state.dilemma && DILEMMA_BY_ID[state.dilemma];
+    if (!d) return null;
+    return { ...d, options: d.options.map(o => ({ ...o, affordable: !(o.dna < 0) || state.dna >= -o.dna })) };
+  }
+
+  function resolveDilemma(index) {
+    const d = state.dilemma && DILEMMA_BY_ID[state.dilemma];
+    const o = d && d.options[index];
+    if (!o) return { ok: false, msg: 'Nothing to decide' };
+    if (o.dna < 0 && state.dna < -o.dna) return { ok: false, msg: 'Not enough DNA' };
+
+    state.dilemma = null;
+    state.nextDilemmaDay = state.day + 35 + Math.floor(rand() * 25);
+
+    if (o.dna > 0) awardDna(o.dna);
+    if (o.dna < 0) { state.dna += o.dna; state.dnaSpent -= o.dna; emit('dna', { amount: 0 }); }
+    if (o.detect) {
+      // Before identification this moves the meter; afterwards the same
+      // attention (or lack of it) lands on the research effort instead.
+      if (!state.cureActive) state.noticeBonus = Math.max(-0.25, state.noticeBonus + o.detect);
+      else state.cureProgress = clamp(state.cureProgress + o.detect * 10, 0, 99);
+    }
+    if (o.cure && state.cureActive && !state.cureDeployed) {
+      state.cureProgress = clamp(state.cureProgress + o.cure, 0, 99);
+    }
+    if (o.boost) {
+      state.activeEvents.push({ id: 'choice_' + d.id, name: o.boost.name, effect: o.boost, remaining: o.boost.days });
+      rebuildEventBoosts();
+    }
+    if (o.seed) {
+      const targets = countryList.filter(c => canReceive(c) && c.ports > 0);
+      const src = state.countries[state.originIso];
+      for (let i = 0; i < o.seed && targets.length; i++) {
+        const dst = targets.splice(Math.floor(rand() * targets.length), 1)[0];
+        seedCountry(dst, 'sea route', src ? src.iso : null);
+      }
+    }
+    if (o.mutate) {
+      const t = randomAvailableSymptom();
+      if (t) grantMutation(t);
+    }
+    emit('events');
+    emit('dilemmaResolved', { id: d.id, index });
+    return { ok: true };
+  }
+
+  // ─── RUN LOG ──────────────────────────────────
+  // Turning points, each recorded once, for the end-of-run timeline.
+  function mark(key, text) {
+    if (state.log.some(e => e.key === key)) return;
+    state.log.push({ day: state.day, key, text });
+  }
+
+  function markMilestones() {
+    const inf = state.totalInfected + state.totalDead, pop = state.totalPop;
+    if (state.totalDead > 0)          mark('death',   'First death');
+    if (inf >= 1e6)                   mark('million', 'One million cases');
+    if (inf >= 1e9)                   mark('billion', 'One billion cases');
+    if (state.cureProgress >= 50)     mark('cure50',  'Cure research half complete');
+    if (state.totalDead >= pop / 2)   mark('half',    'Half of humanity dead');
+    if (state.totalHealthy / pop < 0.001 && state.totalInfected > 0) mark('all', 'Everyone alive is infected');
+  }
+
   // ─── ADVICE ───────────────────────────────────
   // Counts the UI uses to warn the player about slow-burning problems.
   function updateAdvice() {
@@ -768,6 +875,7 @@ const Game = (() => {
 
   function endGame(won, reason) {
     if (state.phase !== 'spreading') return;
+    mark('end', won ? 'The last human dies' : reason === 'burnout' ? 'The pathogen dies with its last host' : 'The last patient is cured');
     state.phase     = won ? 'won' : 'lost';
     state.endReason = reason;
     stopLoop();
@@ -845,6 +953,10 @@ const Game = (() => {
     state.freeTraits = new Set(d.state.freeTraits);
     state.paused     = true;
     state.ops     = d.state.ops || {};
+    state.log     = d.state.log || [];
+    state.dilemmasSeen = d.state.dilemmasSeen || [];
+    state.noticeBonus  = d.state.noticeBonus || 0;
+    state.mode    = d.state.mode || 'standard';
     state.advice  = d.state.advice || { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
     rngState      = d.rngState;
     stepCount     = d.stepCount;
@@ -902,6 +1014,7 @@ const Game = (() => {
     betaFor, deathRateFor, reproductionFor,
     getBubbles, collectBubble,
     opStatus, useOperation, getOperations: () => OPERATIONS,
+    getDilemma, resolveDilemma,
     saveGame, loadSave, hasSave, clearSave, getSaveMeta,
   };
 })();

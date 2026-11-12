@@ -791,6 +791,118 @@ const OPERATIONS = [
   },
 ];
 
+// ─── DILEMMAS ────────────────────────────────────
+// Choices the game puts to the player every month or two. Both options
+// cost something. `when` decides whether a dilemma can come up.
+// Option effects (all optional):
+//   dna:    DNA gained (negative = spent; the option is disabled if unaffordable)
+//   detect: share of the detection threshold added (negative hides you).
+//           Once the disease is identified it moves cure progress instead.
+//   cure:   cure progress points added or removed (only once research exists)
+//   boost:  a timed effect, same fields as world events
+//   seed:   number of uninfected countries to infect
+//   mutate: gain a random symptom for free
+const DILEMMAS = [
+  {
+    id: 'broker', title: 'Black Market Genome', icon: '💰',
+    text: 'A broker has a stolen sample of your pathogen and a rival lab willing to pay for it.',
+    when: gs => !gs.cureActive,
+    options: [
+      { label: 'Let the sale happen', note: 'Their lab work feeds back into your evolution, but people will talk.', dna: 5, detect: 0.30 },
+      { label: 'Make the sample disappear', note: 'Costs you, keeps you hidden.', dna: -3, detect: -0.10 },
+    ],
+  },
+  {
+    id: 'whistleblower', title: 'The Whistleblower', icon: '📣',
+    text: 'A regional doctor has noticed the pattern and is about to publish.',
+    when: gs => !gs.cureActive && gs.detection > 0.25,
+    options: [
+      { label: 'Discredit them', note: 'A smear campaign buys time.', dna: -5, detect: -0.20 },
+      { label: 'Let them publish', note: 'The world gets a head start on you.', dna: 3, detect: 0.25 },
+    ],
+  },
+  {
+    id: 'gathering', title: 'Ten Million Pilgrims', icon: '🕌',
+    text: 'A vast gathering is about to bring travellers from every continent into one infected city.',
+    when: gs => gs.totalInfected > 1e6,
+    options: [
+      { label: 'Ride the crowd home', note: 'Spreads fast and far for a month. Hard to miss.', detect: 0.20,
+        boost: { name: 'Mass gathering', infectivityBoost: 0.10, travelMult: 1.5, days: 28 } },
+      { label: 'Stay quiet', note: 'Use the cover to adapt instead.', dna: 3 },
+    ],
+  },
+  {
+    id: 'freighter', title: 'Ghost Freighter', icon: '🚢',
+    text: 'A cargo ship with an infected crew is requesting a berth in a country you have not reached.',
+    when: gs => Object.values(gs.countries).some(c => c.infected === 0 && c.healthy > 0 && c.ports > 0),
+    options: [
+      { label: 'Let it dock', note: 'A new country, and a very public outbreak.', seed: 1, detect: 0.12 },
+      { label: 'Leave it adrift', note: 'The quarantined crew become a living laboratory.', dna: 3 },
+    ],
+  },
+  {
+    id: 'reservoir', title: 'Animal Reservoir', icon: '🦇',
+    text: 'The pathogen has started turning up in wildlife near infected towns.',
+    when: gs => gs.countriesInfected >= 5,
+    options: [
+      { label: 'Adapt to the new hosts', note: 'Steady background spread for two months.',
+        boost: { name: 'Animal reservoir', infectivityBoost: 0.05, days: 45 } },
+      { label: 'Stay specialised in humans', note: 'Focus pays off in DNA.', dna: 3 },
+    ],
+  },
+  {
+    id: 'unstable', title: 'Unstable Genome', icon: '🧬',
+    text: 'Replication errors are piling up. The strain could go anywhere from here.',
+    when: () => true,
+    options: [
+      { label: 'Let it run wild', note: 'A free symptom you did not choose, plus DNA.', dna: 4, mutate: true },
+      { label: 'Stabilise it', note: 'Pay to stay in control.', dna: -3 },
+    ],
+  },
+  {
+    id: 'breakthrough', title: 'Research Breakthrough', icon: '🧪',
+    text: 'A lab has isolated a compound that works against you in the dish. Trials start next week.',
+    when: gs => gs.cureActive && gs.cureProgress > 20 && gs.cureProgress < 90,
+    options: [
+      { label: 'Sabotage the trial', note: 'Sets the cure back.', dna: -6, cure: -6 },
+      { label: 'Evolve around it', note: 'A free symptom, and treatments fail for a while.', mutate: true,
+        boost: { name: 'Treatment failures', cureResist: 0.20, days: 30 } },
+    ],
+  },
+  {
+    id: 'hoax', title: 'Miracle Cure Hoax', icon: '🧴',
+    text: 'A fake remedy is going viral. Millions are skipping real treatment to try it.',
+    when: gs => gs.cureActive && gs.cureProgress < 90,
+    options: [
+      { label: 'Amplify it', note: 'Research loses a month of public trust.', dna: -4,
+        boost: { name: 'Miracle cure hoax', cureResist: 0.25, days: 25 } },
+      { label: 'Let it fade', note: 'Take what the chaos gives you.', dna: 2 },
+    ],
+  },
+  {
+    id: 'convoy', title: 'Refugee Convoys', icon: '🚶',
+    text: 'People are fleeing the worst-hit regions in their hundreds of thousands.',
+    when: gs => gs.totalDead > 1e5 || gs.advice.lockdowns >= 3,
+    options: [
+      { label: 'Travel with them', note: 'Closed borders leak for a month.',
+        boost: { name: 'Refugee convoys', travelMult: 1.8, days: 30 } },
+      { label: 'Burn through the camps', note: 'Deadlier for a while, and everyone will notice.', dna: 4,
+        boost: { name: 'Camp outbreaks', lethalityBoost: 0.05, days: 30 } },
+    ],
+  },
+  {
+    id: 'overload', title: 'Hospitals at Breaking Point', icon: '🏥',
+    text: 'Health systems in the hardest-hit countries are one bad week from collapse.',
+    when: gs => gs.totalDead > 1e6,
+    options: [
+      { label: 'Push them over', note: 'Death rates climb for six weeks.',
+        boost: { name: 'Hospital collapse', lethalityBoost: 0.08, days: 42 } },
+      { label: 'Ease off', note: 'Symptoms fade from view for three weeks.',
+        boost: { name: 'Receding symptoms', severityMask: 0.5, days: 21 } },
+    ],
+  },
+];
+
 // ─── WORLD EVENTS ────────────────────────────────
 // prob: chance per game day. days: how long a timed effect lasts.
 const WORLD_EVENTS = [

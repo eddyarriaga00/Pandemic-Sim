@@ -31,6 +31,7 @@ The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It pu
 - **Detection.** Visible illness and deaths in countries with working healthcare fill a detection meter. Mild pathogens get a long head start; cure research only begins once the disease is identified.
 - **Cure.** Research is funded by countries in proportion to wealth, healthcare and how much of their workforce is still on its feet. A disease nobody is dying from gets little priority; a lethal one gets wartime funding until the researchers themselves start dying.
 - **Government response.** Each country closes airports, then ports, then land borders, then locks down as its visible caseload climbs. Untouched countries may seal themselves off once the world panics. A country that loses half its population collapses and stops enforcing anything.
+- **Decisions.** Every month or two the game pauses and puts a two-way choice to the player (a whistleblower, a stolen sample, a ship asking to dock). Both options cost something.
 - **Operations.** Four one-off actions bought with DNA, each with a cooldown and a rising cost: superspreader events, a smuggling network that reaches sealed countries, going dormant to hide symptoms, and a disinformation campaign that stalls the cure.
 - **Routes.** Transmission traits are not just bigger numbers: airborne traits travel by plane, waterborne by ship, livestock and saliva over land borders, insects in the tropics, and so on. Closed routes still leak a little, more with the right traits.
 
@@ -41,6 +42,10 @@ The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It pu
 - Interactive D3 world map of 118 countries: pan, zoom, click for per-country stats and whether the outbreak there is growing or burning out
 - 46 traits across transmission, symptoms and abilities, with dependencies and devolving
 - 6 pathogen types and 4 difficulties
+- Infection drawn as points that spread across each country from where the pathogen entered, and turn to ash as people die
+- Evolution screen laid out as trait trees, with each chain shown as a path
+- Daily Outbreak: one fixed pathogen, starting country and random seed per day, with a shareable result
+- End-of-run timeline of the turning points (identified, first closure, first collapse, and so on)
 - A dashboard with a live epidemic curve, tappable hotspots and the effects currently in play
 - Advisor warnings when the outbreak is burning out, countries seal themselves off, or DNA sits unspent
 - Best winning run per pathogen type and difficulty, kept on the device
@@ -95,7 +100,7 @@ node tools/balance.js --difficulty severe --type virus
 node tools/balance.js --trace --bot planner
 ```
 
-Current numbers for the planner, which also uses operations: roughly 75 to 100% wins on Standard depending on type (60% for Synthetic), 30% on Severe, 5% on Extinction. Rushing lethality or buying at random loses almost every time.
+Current numbers for the planner, which also uses operations and answers decisions: roughly 75 to 100% wins on Standard depending on type (65% for Synthetic), 35% on Severe, 20% on Extinction. Rushing lethality or buying at random loses almost every time.
 
 Tuning constants live in the `T` object at the top of `js/game.js`; per-type and per-difficulty multipliers are in `js/data.js`.
 

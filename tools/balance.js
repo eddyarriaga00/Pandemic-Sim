@@ -83,6 +83,16 @@ function play(type, difficulty, botName, seed, trace) {
     if (gs.day === lastDay) continue;
     lastDay = gs.day;
     for (const b of G.getBubbles()) if (rnd() < 0.15) G.collectBubble(b.id);
+    const dl = G.getDilemma();
+    if (dl) {
+      // The planner avoids attention and unplanned symptoms; the others pick blind.
+      let pick = Math.floor(rnd() * dl.options.length);
+      if (botName === 'planner') {
+        const score = o => (o.detect || 0) * -10 + (o.mutate ? -4 : 0) + (o.dna || 0) * 0.5 + (o.boost ? 2 : 0) + (o.cure ? 3 : 0);
+        pick = dl.options.map((o, i) => [o.affordable ? score(o) : -99, i]).sort((a, b) => b[0] - a[0])[0][1];
+      }
+      if (!G.resolveDilemma(pick).ok) G.resolveDilemma(1 - pick);
+    }
     BOTS[botName](G, rnd);
     if (trace && gs.day % 30 === 0) {
       console.log(`d${String(gs.day).padStart(4)} inf ${(gs.totalInfected / 1e6).toFixed(1).padStart(8)}M  dead ${(gs.totalDead / 1e6).toFixed(1).padStart(8)}M  ` +
