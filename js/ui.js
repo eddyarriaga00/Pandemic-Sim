@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - UI Manager
+   PATHOGEN v3 - UI Manager
    ═══════════════════════════════════════════════ */
 
 const UI = (() => {
@@ -31,25 +31,7 @@ const UI = (() => {
     }
   }
 
-  // ─── HUD UPDATE ───────────────────────────────
-  function updateHud() {
-    const s = Game.getStats();
-
-    el('hud-dead',     fmt(s.totalDead));
-    el('hud-infected', fmt(s.totalInfected));
-    el('hud-healthy',  fmt(s.totalHealthy));
-    el('hud-cure',     s.cureProgress.toFixed(1) + '%');
-    el('hud-day',      s.day);
-    el('hud-dna',      s.dna);
-    el('hud-countries', s.countriesInfected);
-
-    // Pulse dead counter when significant
-    if (s.totalDead > 100000) {
-      const deadEl = document.getElementById('hud-dead');
-      if (deadEl) deadEl.style.color = '#ff0033';
-    }
-  }
-
+  // ─── HUD ──────────────────────────────────────
   function updateDnaDisplay() {
     const dna = Game.getState().dna;
     el('hud-dna',       dna);
@@ -165,6 +147,12 @@ const UI = (() => {
   let toastBusy = false;
 
   function toast(msg, type = 'info') {
+    // At high speed events can arrive faster than they can be read; keep
+    // the backlog short by dropping the oldest routine messages.
+    if (toastQueue.length >= 5) {
+      const i = toastQueue.findIndex(t => t.type === 'info' || t.type === 'dna');
+      toastQueue.splice(i === -1 ? 0 : i, 1);
+    }
     toastQueue.push({ msg, type });
     if (!toastBusy) drainToastQueue();
   }
@@ -205,6 +193,12 @@ const UI = (() => {
     setNewsText(msg);
 
     setTimeout(drainToastQueue, 600);
+  }
+
+  // Drop everything queued or on screen (game over, new game).
+  function clearToasts() {
+    toastQueue.length = 0;
+    document.getElementById('toast-container')?.replaceChildren();
   }
 
   // Also expose as showNotification for backwards compat
@@ -257,23 +251,26 @@ const UI = (() => {
     el('cp-dead',     fmt(country.dead));
     el('cp-healthy',  fmt(Math.max(0, country.healthy)));
 
-    // Rate display (delta since last refresh)
+    // Daily change, sampled once per game day
+    const day  = Game.getState().day;
     const prev = _cpPrev[country.iso];
-    if (prev) {
-      const dInf  = country.infected - prev.infected;
-      const dDead = country.dead - prev.dead;
-      const rateEl = document.getElementById('cp-inf-rate');
-      const dRateEl = document.getElementById('cp-dead-rate');
-      if (rateEl)  rateEl.textContent  = dInf  > 0 ? `+${fmt(dInf)}/tick`  : '';
-      if (dRateEl) dRateEl.textContent = dDead > 0 ? `+${fmt(dDead)}/tick` : '';
+    if (!prev || prev.day !== day) {
+      if (prev && prev.day === day - 1) {
+        const dInf  = country.infected - prev.infected;
+        const dDead = country.dead - prev.dead;
+        el('cp-inf-rate',  dInf  > 0 ? `+${fmt(dInf)}/d`  : dInf < 0 ? `-${fmt(-dInf)}/d` : '');
+        el('cp-dead-rate', dDead > 0 ? `+${fmt(dDead)}/d` : '');
+      } else {
+        el('cp-inf-rate', ''); el('cp-dead-rate', '');
+      }
+      _cpPrev[country.iso] = { day, infected: country.infected, dead: country.dead };
     }
-    _cpPrev[country.iso] = { infected: country.infected, dead: country.dead };
 
-    const airportStr = country.airports > 0
-      ? country.airports + (country.airportClosed ? ' (CLOSED ✈)' : ' (OPEN)')
-      : 'None';
-    const lockStr = country.lockdown ? ' | 🔒 LOCKDOWN' : '';
-    el('cp-airports', airportStr + lockStr);
+    el('cp-airports', govSummary(country));
+    el('cp-routes',   routeSummary(country));
+    const trend = trendFor(country);
+    const trendEl = document.getElementById('cp-trend');
+    if (trendEl) { trendEl.textContent = trend.text; trendEl.style.color = trend.color; }
 
     setWidth('cp-bar-inf',     Math.min(100, infPct));
     setWidth('cp-bar-dead',    Math.min(100, deadPct));
@@ -299,6 +296,39 @@ const UI = (() => {
       statusEl.textContent = status;
       statusEl.className = 'cp-status-badge ' + cls;
     }
+  }
+
+  // ─── COUNTRY SUMMARIES (panel + tooltip) ──────
+  function govSummary(c) {
+    if (c.collapsed) return 'Collapsed';
+    const parts = [];
+    if (c.lockdown)      parts.push('Lockdown');
+    if (c.borderClosed)  parts.push('Borders shut');
+    if (c.airportClosed && c.airports > 0) parts.push('No flights');
+    if (c.portClosed && c.ports > 0)       parts.push('Ports shut');
+    return parts.length ? parts.join(' · ') : 'Open';
+  }
+
+  function routeSummary(c) {
+    const parts = [];
+    if (c.airports > 0) parts.push(`✈ ${c.airports}`);
+    if (c.ports > 0)    parts.push(`⚓ ${c.ports}`);
+    parts.push(`🛣 ${c.borders.length}`);
+    return parts.join('  ');
+  }
+
+  // Is the outbreak in this country growing or killing itself off?
+  function trendFor(c) {
+    if (c.infected <= 0) {
+      if (c.dead > 0 && c.healthy > 0) return { text: 'Died out, survivors remain', color: 'var(--blue)' };
+      return { text: c.healthy > 0 ? 'Not infected' : 'No survivors', color: 'var(--tx-2)' };
+    }
+    if (c.healthy <= 0) return { text: 'Everyone infected', color: 'var(--amber)' };
+    const r = Game.reproductionFor(c);
+    if (r === Infinity) return { text: 'Spreading freely', color: 'var(--green)' };
+    if (r >= 1.5)       return { text: `Growing (R ${r.toFixed(1)})`, color: 'var(--green)' };
+    if (r >= 1)         return { text: `Barely growing (R ${r.toFixed(1)})`, color: 'var(--amber)' };
+    return { text: `Burning out (R ${r.toFixed(1)})`, color: 'var(--red)' };
   }
 
   function hideCountryPanel() {
@@ -357,18 +387,22 @@ const UI = (() => {
   }
 
   // ─── GAME OVER ────────────────────────────────
-  function showGameOver(won, gs) {
+  function showGameOver(won, gs, reason) {
     const icon  = document.getElementById('gameover-icon');
     const title = document.getElementById('gameover-title');
     const sub   = document.getElementById('gameover-subtitle');
 
     icon.textContent = won ? '☣' : '🔬';
     icon.className   = 'gameover-icon ' + (won ? 'win' : 'lose');
-    title.textContent = won ? 'HUMANITY FALLS' : 'CURE DEPLOYED';
+    const burnout = reason === 'burnout';
+    if (burnout) icon.textContent = '🕯';
+    title.textContent = won ? 'HUMANITY FALLS' : burnout ? 'PATHOGEN EXTINCT' : 'CURE DEPLOYED';
     title.className   = won ? 'win-title' : 'lose-title';
     sub.textContent   = won
-      ? `${gs.diseaseName} has exterminated all life on Earth.`
-      : `Scientists completed a cure before ${gs.diseaseName} could finish its work.`;
+      ? `${gs.diseaseName} has wiped out the human race.`
+      : burnout
+        ? `${gs.diseaseName} killed its last host while ${fmt(gs.totalHealthy)} people were still uninfected.`
+        : `Scientists completed a cure before ${gs.diseaseName} could finish its work.`;
 
     el('go-days',       gs.day);
     el('go-total-inf',  fmt(gs.peakInfected));
@@ -381,19 +415,21 @@ const UI = (() => {
     const gradeEl = document.getElementById('gameover-grade');
 
     if (won) {
-      const score = Math.max(0, Math.floor(20000 - gs.day * 10 - gs.cureProgress * 30));
+      const diffBonus = { mild: 0.7, standard: 1, severe: 1.4, extinction: 2 }[gs.difficulty] || 1;
+      const score = Math.max(0, Math.floor((20000 - gs.day * 14 - gs.cureProgress * 60) * diffBonus));
       scoreEl.textContent = `BIOHAZARD SCORE: ${score.toLocaleString()}`;
       scoreEl.style.color = '#ff2244';
       const grade = score > 15000 ? 'S' : score > 10000 ? 'A' : score > 6000 ? 'B' : 'C';
       gradeEl.textContent = grade;
       gradeEl.style.color = { S: '#ffdd00', A: '#00ff41', B: '#ff8c00', C: '#aaaaaa' }[grade];
     } else {
-      scoreEl.textContent = 'HUMANITY SURVIVES';
+      scoreEl.textContent = `HUMANITY SURVIVES: ${fmt(gs.totalHealthy)} ALIVE`;
       scoreEl.style.color = '#00aaff';
       gradeEl.textContent = 'F';
       gradeEl.style.color = '#00aaff';
     }
 
+    clearToasts();
     showScreen('screen-gameover');
     // Render epidemic curve with Chart.js
     setTimeout(() => renderEpidemicChart(won), 200);
@@ -403,7 +439,7 @@ const UI = (() => {
   function renderEpidemicChart(won) {
     const canvas = document.getElementById('epidemic-chart');
     if (!canvas || typeof Chart === 'undefined') return;
-    const history = typeof Game !== 'undefined' ? Game.getHistory() : [];
+    const history = Game.getHistory();
     if (!history.length) return;
 
     if (_chartInstance) { _chartInstance.destroy(); _chartInstance = null; }
@@ -496,7 +532,7 @@ const UI = (() => {
     panel.innerHTML = sorted.map(c => {
       const infPct = (c.infected / c.pop * 100).toFixed(1);
       const dead   = c.dead > 0 ? ` ☠${fmt(c.dead)}` : '';
-      const lockIcon = c.lockdown ? ' 🔒' : c.airportClosed ? ' ✈' : '';
+      const lockIcon = c.collapsed ? ' 🏚' : c.lockdown ? ' 🔒' : c.airportClosed ? ' ✈' : '';
       return `<div class="top-country-row">
         <span class="tc-name">${c.name}${lockIcon}</span>
         <span class="tc-stats"><span class="tc-inf">${fmt(c.infected)}</span><span class="tc-dead">${dead}</span></span>
@@ -524,7 +560,7 @@ const UI = (() => {
     function frame() {
       const gs = Game.getState();
 
-      if (gs.phase === 'spreading' || gs.phase === 'won' || gs.phase === 'lost') {
+      {
         const K = 0.11;
         _disp.dead     += (gs.totalDead     - _disp.dead)     * K;
         _disp.infected += (gs.totalInfected - _disp.infected) * K;
@@ -541,38 +577,19 @@ const UI = (() => {
         el('evo-dna-count', gs.dna);
         updateCureBar(_disp.cure);
 
-        if (gs.totalDead > 50000) {
-          const deadEl = document.getElementById('hud-dead');
-          if (deadEl) deadEl.style.color = '#ff2244';
-        }
+        // Daily change
+        const r = gs.rates;
+        el('hud-inf-rate',  r.infected > 0 ? `+${fmt(r.infected)}/d` : r.infected < 0 ? `-${fmt(-r.infected)}/d` : '');
+        el('hud-dead-rate', r.dead > 0 ? `+${fmt(r.dead)}/d` : '');
+        el('hud-cure-rate', gs.cureActive && r.cure > 0 ? `+${r.cure.toFixed(2)}%/d` : '');
 
-        // Daily rate display (computed from last 2 history snapshots)
-        const hist = Game.getHistory();
-        if (hist.length >= 2) {
-          const prev = hist[hist.length - 2];
-          const curr = hist[hist.length - 1];
-          const infDelta  = curr.infected - prev.infected;
-          const deadDelta = curr.dead     - prev.dead;
-          const cureDelta = curr.cure     - prev.cure;
-
-          const infRateEl  = document.getElementById('hud-inf-rate');
-          const deadRateEl = document.getElementById('hud-dead-rate');
-          const cureRateEl = document.getElementById('hud-cure-rate');
-
-          if (infRateEl)  infRateEl.textContent  = infDelta  >= 0 ? `+${fmt(infDelta)}/d`  : `${fmt(infDelta)}/d`;
-          if (deadRateEl) deadRateEl.textContent = deadDelta >= 0 ? `+${fmt(deadDelta)}/d` : '';
-          if (cureRateEl && gs.cureActive) cureRateEl.textContent = cureDelta > 0 ? `+${cureDelta.toFixed(1)}%/d` : '';
-          else if (cureRateEl && !gs.cureActive) cureRateEl.textContent = '';
-        }
-
-        // Stealth badge — shown when cure not yet triggered
-        const stealthEl = document.getElementById('stealth-badge');
-        if (stealthEl) {
-          if (!gs.cureActive && gs.phase === 'spreading' && gs.totalInfected > 0) {
-            stealthEl.classList.remove('hidden');
-          } else {
-            stealthEl.classList.add('hidden');
-          }
+        // Detection meter: how close the world is to noticing
+        const meter = document.getElementById('detect-meter');
+        if (meter) {
+          const detected = gs.cureActive;
+          meter.classList.toggle('detected', detected);
+          el('detect-label', detected ? 'IDENTIFIED' : `UNDETECTED ${Math.round(gs.detection * 100)}%`);
+          setWidth('detect-fill', detected ? 100 : gs.detection * 100);
         }
 
         // Cure milestone sounds at 25 / 50 / 75 %
@@ -634,16 +651,30 @@ const UI = (() => {
     _raf = requestAnimationFrame(frame);
   }
 
+  // Clear anything a previous game left on the HUD.
+  function resetHud() {
+    document.querySelector('.dead-stat')?.classList.remove('has-deaths');
+    ['hud-inf-rate', 'hud-dead-rate', 'hud-cure-rate', 'cp-inf-rate', 'cp-dead-rate'].forEach(id => el(id, ''));
+    for (const k in _cpPrev) delete _cpPrev[k];
+    const list = document.getElementById('top-countries-list');
+    if (list) list.innerHTML = '';
+    hideCountryPanel();
+    clearToasts();
+    updateCureBar(0);
+    setNewsText('Monitoring global health conditions...');
+    checkEvoAvailable();
+  }
+
   function stopRenderLoop() {
     if (_raf) { cancelAnimationFrame(_raf); _raf = null; }
   }
 
   return {
-    showScreen, updateHud, updateDnaDisplay, updateCureBar,
+    showScreen, updateDnaDisplay, updateCureBar,
     updateStatBars, showDnaPopup, toast, showNotification,
     showCountryPanel, hideCountryPanel, setNewsText,
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
-    flashScreen, updateTopCountries,
+    flashScreen, updateTopCountries, resetHud, clearToasts, govSummary, trendFor,
   };
 })();

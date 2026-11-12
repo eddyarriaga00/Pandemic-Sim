@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - World Map (D3 + TopoJSON)
+   PATHOGEN v3 - World Map (D3 + TopoJSON)
    ═══════════════════════════════════════════════ */
 
-const Map = (() => {
+const WorldMap = (() => {
   let svg, g, projection, pathGen, zoomBehavior;
   let worldTopo        = null;
   let pathsByIso       = {};
@@ -23,8 +23,8 @@ const Map = (() => {
   // Countries to show name labels on (major/large ones)
   const LABEL_ISOS = new Set([
     840, 124, 76, 643, 156, 356, 36, 566, 710, 682,
-    818, 276, 826, 250, 792, 364, 586, 360, 704, 410,
-    32, 484, 604, 392, 724, 380,
+    818, 276, 826, 250, 792, 364, 586, 360,
+    32, 484, 604, 392, 724,
   ]);
 
   const C = {
@@ -40,6 +40,8 @@ const Map = (() => {
     d0: '#1c0808',
     d1: '#080202',
   };
+
+  const GOV_ICON_MIN_ZOOM = 1.8; // below this the icons just bury the map
 
   // Route colors by method
   const ROUTE_COLORS = {
@@ -82,8 +84,9 @@ const Map = (() => {
           const s = Math.max(0.5, Math.min(1.2, 1 / transform.k));
           labelLayer.selectAll('.country-label').attr('font-size', `${9 * s}px`);
         }
-        // Scale gov icons similarly
+        // Government icons only make sense once you can tell countries apart
         if (govIconLayer) {
+          govIconLayer.style('display', transform.k < GOV_ICON_MIN_ZOOM ? 'none' : null);
           const s = Math.max(0.6, Math.min(1.3, 1 / transform.k * 1.2));
           govIconLayer.selectAll('.gov-icon-group').attr('transform', d => {
             const c = centroids[d.iso];
@@ -111,7 +114,7 @@ const Map = (() => {
 
     try {
       worldTopo = await d3.json(
-        'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+        'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json'
       );
       renderWorld(worldTopo);
       mapInitialized = true;
@@ -215,7 +218,8 @@ const Map = (() => {
 
     // Layers (order matters — bottom to top)
     centroidLayer  = g.append('g').attr('class', 'centroid-layer');
-    govIconLayer   = g.append('g').attr('class', 'gov-icon-layer');
+    govIconLayer   = g.append('g').attr('class', 'gov-icon-layer')
+      .style('display', _currentZoom.k < GOV_ICON_MIN_ZOOM ? 'none' : null);
     epicenterLayer = g.append('g').attr('class', 'epicenter-layer');
     labelLayer     = g.append('g').attr('class', 'label-layer');
     bubbleLayer    = g.append('g').attr('class', 'bubble-layer');
@@ -299,7 +303,7 @@ const Map = (() => {
     svg.append('text').attr('x','50%').attr('y','51%').attr('text-anchor','middle')
       .attr('fill','#8b949e').attr('font-size','11px')
       .attr('font-family','Inter, system-ui, sans-serif')
-      .text('Requires internet — open index.html in Chrome or Firefox');
+      .text('The world atlas could not be downloaded. Check your connection and reload.');
   }
 
   // ─── RICH HOVER TOOLTIP ───────────────────────
@@ -326,10 +330,10 @@ const Map = (() => {
     else                    { statusText = '🟢 UNINFECTED'; statusClass = 'rtt-clear'; }
 
     // Government response line
-    const govParts = [];
-    if (country.lockdown)      govParts.push('<span class="rtt-gov-badge rtt-lockdown">🔒 LOCKDOWN</span>');
-    if (country.airportClosed) govParts.push('<span class="rtt-gov-badge rtt-closed">✈ AIRPORTS CLOSED</span>');
-    if (!govParts.length)      govParts.push('<span class="rtt-gov-badge rtt-open">✓ OPEN</span>');
+    const gov      = UI.govSummary(country);
+    const govClass = gov === 'Open' ? 'rtt-open' : (country.lockdown || country.collapsed) ? 'rtt-lockdown' : 'rtt-closed';
+    const govParts = [`<span class="rtt-gov-badge ${govClass}">${gov.toUpperCase()}</span>`];
+    const trend    = UI.trendFor(country);
 
     // Climate/wealth icons
     const climateIcon = { temperate: '🌤', tropical: '🌴', arid: '☀️', cold: '❄️' }[country.climate] || '🌍';
@@ -350,6 +354,7 @@ const Map = (() => {
         ${country.reached ? `
         <div class="rtt-row"><span class="rtt-lbl">Infected</span><span class="rtt-val rtt-inf">${UI.fmt(country.infected)} <span class="rtt-pct">(${infPct.toFixed(1)}%)</span></span></div>
         <div class="rtt-row"><span class="rtt-lbl">Dead</span><span class="rtt-val rtt-dead">${UI.fmt(country.dead)} <span class="rtt-pct">(${deadPct.toFixed(2)}%)</span></span></div>
+        <div class="rtt-row"><span class="rtt-lbl">Outbreak</span><span class="rtt-val" style="color:${trend.color}">${trend.text}</span></div>
         ` : `<div class="rtt-row"><span class="rtt-lbl">Status</span><span class="rtt-val" style="color:var(--green)">Not yet reached</span></div>`}
         <div class="rtt-divider"></div>
         <div class="rtt-row"><span class="rtt-lbl">${climateIcon} Climate</span><span class="rtt-val rtt-cap">${country.climate}</span></div>
@@ -459,7 +464,7 @@ const Map = (() => {
 
     // Rich tooltip during gameplay
     if (gs.phase === 'spreading' || gs.phase === 'won' || gs.phase === 'lost') {
-      showRichTooltip(event, country, gs);
+      if (localStorage.getItem('set_show_tooltips') !== '0') showRichTooltip(event, country, gs);
     } else if (gs.phase === 'idle') {
       // Simple tooltip in pick mode
       const tt     = document.getElementById('map-tooltip');
@@ -584,7 +589,7 @@ const Map = (() => {
     if (gs.phase !== 'spreading') return;
 
     const active = Game.getAllCountries().filter(
-      c => c.reached && (c.lockdown || c.airportClosed)
+      c => c.collapsed || c.lockdown || c.airportClosed || c.portClosed
     );
 
     const sel = govIconLayer.selectAll('.gov-icon-group').data(active, d => d.iso);
@@ -595,22 +600,23 @@ const Map = (() => {
       .style('opacity', 0)
       .attr('pointer-events', 'none');
 
-    // Background circle
     enter.append('circle')
       .attr('r', 5)
-      .attr('fill', d => d.lockdown ? 'rgba(248,81,73,0.85)' : 'rgba(88,166,255,0.75)')
       .attr('stroke', 'rgba(0,0,0,0.4)')
       .attr('stroke-width', 0.5);
-
-    // Icon text
     enter.append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('font-size', '5px')
-      .attr('pointer-events', 'none')
-      .text(d => d.lockdown ? '🔒' : '✈');
+      .attr('pointer-events', 'none');
 
     enter.transition().duration(400).style('opacity', 1);
+
+    // A country's status escalates over time, so restyle existing icons too
+    const all = govIconLayer.selectAll('.gov-icon-group');
+    all.select('circle').attr('fill', d =>
+      d.collapsed ? 'rgba(72,79,88,0.9)' : d.lockdown ? 'rgba(248,81,73,0.85)' : 'rgba(88,166,255,0.75)');
+    all.select('text').text(d => d.collapsed ? '🏚' : d.lockdown ? '🔒' : d.airportClosed ? '✈' : '⚓');
 
     // Position all (enter + update)
     govIconLayer.selectAll('.gov-icon-group')
@@ -628,9 +634,7 @@ const Map = (() => {
   function updateInfectionDots() {
     if (!centroidLayer) return;
 
-    const infected = Game.getAllCountries().filter(
-      c => c.reached && (c.infected + c.dead) > 0
-    );
+    const infected = Game.getAllCountries().filter(c => (c.infected + c.dead) > 0);
 
     const dots = centroidLayer.selectAll('.inf-dot').data(infected, d => d.iso);
 
@@ -996,7 +1000,24 @@ const Map = (() => {
     }
   }
 
-  function setupOceanClick() { /* handled inside renderWorld */ }
+  // ─── RESET (new game on an already-loaded map) ─
+  function reset() {
+    if (!mapInitialized) return;
+    clearSelection();
+    hideRichTooltip();
+    if (epicenterTimer) { clearInterval(epicenterTimer); epicenterTimer = null; }
+    originIso = null;
+    for (const layer of [centroidLayer, govIconLayer, epicenterLayer, routeLayer, bubbleLayer]) {
+      if (layer) layer.selectAll('*').interrupt().remove();
+    }
+    for (const iso in pathsByIso) {
+      pathsByIso[iso].interrupt().attr('fill', C.healthy).attr('filter', null);
+      delete _prevColors[iso];
+      delete _prevFilters[iso];
+    }
+    updateLabels();
+    svg.interrupt().call(zoomBehavior.transform, d3.zoomIdentity);
+  }
 
   // ─── PICK MODE ────────────────────────────────
   function setPick(on) {
@@ -1011,7 +1032,7 @@ const Map = (() => {
 
   return {
     load, updateColors, pulseCountry, highlightCountry,
-    zoomToCountry, resetZoom, resize, setupOceanClick,
+    zoomToCountry, resetZoom, resize, reset, updateGovIcons,
     setOrigin, colorFor, isReady: () => mapInitialized,
     setPick, showTravelRoute,
   };

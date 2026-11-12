@@ -1,875 +1,827 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - Core Game Engine
+   PATHOGEN v3 - Simulation engine
+
+   Pure simulation: no DOM, no audio, no map. Everything the rest of the
+   game needs to react to is published through Game.on(listener), so this
+   file also runs under Node for the balance harness (tools/balance.js).
+
+   Model, per country and per half-day step:
+     S -> I   new cases  = beta_c * I * S / alive        (logistic)
+     I -> D   new deaths = mu_c * I
+     I -> R   only once the cure has been deployed
+   Small counts are drawn from a Poisson distribution, so a handful of
+   cases can stall or die out instead of growing on a fixed schedule.
+   The random generator is seeded and saved with the game.
    ═══════════════════════════════════════════════ */
 
 const Game = (() => {
-  // ─── STATE ────────────────────────────────────
-  const state = {
-    diseaseName: '', diseaseType: 'bacteria', difficulty: 'normal',
+  'use strict';
 
-    // Disease stats (0–1, cumulative from traits)
-    infectivity: 0.0,
-    severity:    0.0,
-    lethality:   0.0,
-    cureResist:  0.0,
+  const STEPS_PER_DAY = 2;
+  const DT            = 1 / STEPS_PER_DAY;          // days per step
+  const DAY_MS        = { 1: 1200, 2: 600, 3: 250 }; // real ms per game day
+  const SAVE_KEY      = 'pathogen_save_v2';
+  const SAVE_VERSION  = 2;
+  const AUTOSAVE_DAYS = 20;
 
-    // These are the BASE values before traits
-    baseInfectivity: 0.0,
-    baseSeverity:    0.0,
-
-    // World totals
-    totalPop:      0,
-    totalInfected: 0,
-    totalDead:     0,
-    totalHealthy:  0,
-    cureProgress:  0,
-    cureActive:    false,
-    day:           0,
-    countriesInfected: 0,
-
-    // DNA
-    dna:        0,
-    dnaSpent:   0,
-    pendingDna: 0,
-    traits: new Set(),
-
-    // Country map: iso → country object
-    countries: {},
-
-    // Game flow
-    phase:        'idle',
-    speed:        1,
-    paused:       false,
-    tickInterval: null,
-
-    // Events
-    activeEvents: [],
-    eventBoosts:  { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} },
-
-    // Government response
-    airportsOpen: true,   // governments can close airports
-    bordersClosed: false, // land border lockdowns
-
-    notifications: [],
-    peakInfected: 0,
-    originIso: null,
-
-    // DNA Bubbles
-    bubbles:      [],
-    nextBubbleId: 0,
+  // ─── TUNING ───────────────────────────────────
+  const T = {
+    betaBase: 0.03,  betaPerInf: 0.55,     // daily transmission rate = base + perInf * infectivity
+    deathPerLeth: 0.06,                    // daily death rate of the infected at lethality 1
+    collapseDeathMult: 4,                  // deaths speed up as a country's dead share grows
+    detectThreshold: 150000,               // "noticed cases" needed before the world reacts
+    cureBase: 1.75,                        // % per day at full effort and priority
+    cureDeployRate: 0.40,                  // share of infected cured per day once deployed
+    land: 0.035, air: 0.010, sea: 0.007,   // daily export chances per route
+    leak: 0.04,                            // how much gets through a closed route
+    seedMean: 3,
+    wealthInf:   { poor: 1.30, middle: 1.05, rich: 0.75 },
+    wealthCure:  { poor: 0.6,  middle: 1.5,  rich: 3.0 },
+    alarmThresh: { rich: 0.0008, middle: 0.003, poor: 0.010 },
   };
 
-  const BASE_TICK_MS  = 750;
-  const TICKS_PER_DAY = 3;
-  let tickCount = 0;
-  let _history = []; // daily snapshots for epidemic curve
+  // ─── STATE ────────────────────────────────────
+  const state = {
+    diseaseName: '', diseaseType: 'bacteria', difficulty: 'standard',
+    infectivity: 0, severity: 0, lethality: 0, cureResist: 0,
+    totalPop: 0, totalInfected: 0, totalDead: 0, totalHealthy: 0,
+    cureProgress: 0, cureActive: false, cureDeployed: false,
+    detection: 0,
+    day: 0, countriesInfected: 0,
+    dna: 0, dnaSpent: 0, pendingDna: 0, cumCases: 0,
+    traits: new Set(), freeTraits: new Set(),
+    countries: {},
+    phase: 'idle', endReason: null,
+    speed: 1, paused: false,
+    activeEvents: [],
+    eventBoosts: emptyBoosts(),
+    rates: { infected: 0, dead: 0, cure: 0 },
+    peakInfected: 0, originIso: null,
+    bubbles: [], nextBubbleId: 0,
+    seed: 1,
+  };
 
-  // ─── COUNTRY CACHES (perf) ────────────────────
-  // Avoid repeated filter()/reduce() inside the hot spreadGlobal() path
-  let _uninfectedAirCache  = null; // countries with airports, not yet reached
-  let _uninfectedPortCache = null; // countries with ports, not yet reached
-  let _uninfectedAllCache  = null; // all uninfected countries
-  let _infectedCache       = null; // all reached countries (for fungus src pick)
-  let _dirtyIsos = new Set();      // countries whose color changed this tick
+  let countryList = [];
+  let mods        = emptyMods();
+  let stepCount   = 0;
+  let history     = [];
+  let historyStride = 1;
+  let rngState    = 1;
+  let dirty       = new Set();
+  let lastAutosaveDay = 0;
 
-  function _invalidateCountryCache() {
-    _uninfectedAirCache  = null;
-    _uninfectedPortCache = null;
-    _uninfectedAllCache  = null;
-    _infectedCache       = null;
+  function emptyBoosts() {
+    return { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} };
+  }
+  function emptyMods() {
+    return { air: 0, sea: 0, land: 0, cold: 0, heat: 0, tropical: 0, poor: 0, rich: 0,
+             urban: 0, rural: 0, stealth: 0, dnaRate: 0, lockdownResist: 0, leak: 0,
+             extremophile: 0 };
   }
 
-  function _getUninfectedAir() {
-    if (!_uninfectedAirCache) {
-      _uninfectedAirCache = Object.values(state.countries)
-        .filter(c => !c.reached && c.airports > 0 && !c.airportClosed);
-    }
-    return _uninfectedAirCache;
+  // ─── EVENTS OUT ───────────────────────────────
+  const listeners = [];
+  function on(fn) { listeners.push(fn); }
+  function emit(type, data) {
+    for (const fn of listeners) fn(type, data || {});
   }
-  function _getUninfectedPort() {
-    if (!_uninfectedPortCache) {
-      _uninfectedPortCache = Object.values(state.countries)
-        .filter(c => !c.reached && c.ports > 0);
-    }
-    return _uninfectedPortCache;
+  function toast(msg, type) { emit('toast', { msg, type: type || 'info' }); }
+
+  // ─── SEEDED RANDOM ────────────────────────────
+  function rand() { // mulberry32
+    rngState = (rngState + 0x6D2B79F5) | 0;
+    let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
-  function _getUninfectedAll() {
-    if (!_uninfectedAllCache) {
-      _uninfectedAllCache = Object.values(state.countries).filter(c => !c.reached);
+  function poisson(lambda) {
+    if (lambda <= 0) return 0;
+    if (lambda > 30) { // normal approximation
+      const u = rand() || 1e-12, v = rand();
+      const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+      return Math.max(0, Math.round(lambda + z * Math.sqrt(lambda)));
     }
-    return _uninfectedAllCache;
+    const limit = Math.exp(-lambda);
+    let k = 0, p = 1;
+    do { k++; p *= rand(); } while (p > limit);
+    return k - 1;
   }
-  function _getInfected() {
-    if (!_infectedCache) {
-      _infectedCache = Object.values(state.countries).filter(c => c.reached);
+  // Number of events given an expected count, never more than `max`.
+  function sample(expected, max) {
+    if (expected <= 0 || max <= 0) return 0;
+    const n = expected < 1e6 ? poisson(expected) : Math.round(expected);
+    return Math.min(max, n);
+  }
+
+  // ─── TRAITS ───────────────────────────────────
+  const TRAITS = {};
+  const ALL_TRAITS = [
+    ...EVOLUTION_TREE.transmissions,
+    ...EVOLUTION_TREE.symptoms,
+    ...EVOLUTION_TREE.abilities,
+  ];
+  for (const t of ALL_TRAITS) TRAITS[t.id] = t;
+
+  function findTrait(id)  { return TRAITS[id] || null; }
+  function getAllTraits() { return ALL_TRAITS; }
+
+  // Disease stats and route/context modifiers are always rebuilt from the
+  // owned trait set, so buying, devolving, mutating and loading can't drift.
+  function recomputeStats() {
+    const td = DISEASE_TYPES[state.diseaseType];
+    let inf = 0.18 * td.infectivityMod;
+    let sev = 0.04 * td.severityMod;
+    let leth = 0, resist = 0;
+    mods = emptyMods();
+
+    for (const id of state.traits) {
+      const t = TRAITS[id];
+      if (!t) continue;
+      const e = t.effects || {};
+      inf    += e.infectivity || 0;
+      sev    += e.severity    || 0;
+      leth   += (e.lethality  || 0) * td.lethalityMod;
+      resist += e.cureResist  || 0;
+      if (t.mods) for (const k in t.mods) mods[k] = (mods[k] || 0) + t.mods[k];
     }
-    return _infectedCache;
+    state.infectivity = clamp(inf, 0, 1);
+    state.severity    = clamp(sev, 0, 1);
+    state.lethality   = clamp(leth, 0, 1);
+    state.cureResist  = clamp(resist, 0, 0.9);
   }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
   // ─── INIT ─────────────────────────────────────
   function init(config) {
+    stopLoop();
     state.diseaseName = config.name       || 'Unnamed';
-    state.diseaseType = config.type       || 'bacteria';
-    state.difficulty  = config.difficulty || 'normal';
-
-    _invalidateCountryCache();
-    _dirtyIsos.clear();
-
-    if (state.tickInterval) { clearInterval(state.tickInterval); state.tickInterval = null; }
+    state.diseaseType = DISEASE_TYPES[config.type] ? config.type : 'bacteria';
+    state.difficulty  = DIFFICULTIES[config.difficulty] ? config.difficulty : 'standard';
+    state.seed        = (config.seed != null ? config.seed : Math.floor(Math.random() * 2 ** 31)) | 0;
+    rngState          = state.seed;
 
     const td = DISEASE_TYPES[state.diseaseType];
-
-    // Base disease stats from type modifiers
-    state.baseInfectivity = 0.18 * td.infectivityMod;
-    state.baseSeverity    = 0.04 * td.severityMod;
-    state.infectivity     = state.baseInfectivity;
-    state.severity        = state.baseSeverity;
-    state.lethality       = 0.0;
-    state.cureResist      = 0.0;
-
     state.totalPop = state.totalInfected = state.totalDead = state.totalHealthy = 0;
     state.cureProgress = 0;
-    state.cureActive   = td.instantCure || false;
-    state.day = 0;
-    state.countriesInfected = 0;
-    state.dna = 0; state.dnaSpent = 0; state.pendingDna = 0;
-    state.traits = new Set();
+    state.cureActive   = !!td.instantCure;
+    state.cureDeployed = false;
+    state.detection    = td.instantCure ? 1 : 0;
+    state.day = 0; state.countriesInfected = 0;
+    state.dna = 0; state.dnaSpent = 0; state.pendingDna = 0; state.cumCases = 0;
+    state.traits = new Set(); state.freeTraits = new Set();
     state.countries = {};
-    state.phase = 'idle';
+    state.phase = 'idle'; state.endReason = null;
     state.speed = 1; state.paused = false;
-    state.activeEvents = [];
-    state.eventBoosts = { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} };
-    state.airportsOpen = true; state.bordersClosed = false;
-    state.peakInfected = 0;
-    state.originIso = null;
-    state.bubbles = [];
-    state.nextBubbleId = 0;
-    tickCount = 0;
-    _history = [];
+    state.activeEvents = []; state.eventBoosts = emptyBoosts();
+    state.rates = { infected: 0, dead: 0, cure: 0 };
+    state.peakInfected = 0; state.originIso = null;
+    state.bubbles = []; state.nextBubbleId = 0;
+    stepCount = 0; history = []; historyStride = 1; dirty = new Set();
+    lastAutosaveDay = 0;
 
     for (const c of COUNTRIES_DATA) {
       state.countries[c.iso] = {
-        ...c,
-        infected: 0, dead: 0, healthy: c.pop,
-        infected_pct: 0, dead_pct: 0,
+        ...c, borders: [],
+        infected: 0, dead: 0, healthy: c.pop, immune: 0,
         reached: false,
-        // Government response
-        airportClosed: false,
-        bordersClosed: false,
-        lockdown: false,
-        cureContrib: c.healthcare * 0.012,
+        airportClosed: false, portClosed: false, borderClosed: false,
+        lockdown: false, collapsed: false,
       };
       state.totalPop     += c.pop;
       state.totalHealthy += c.pop;
     }
+    linkBorders();
+    countryList = Object.values(state.countries);
+    recomputeStats();
   }
 
-  // ─── START IN COUNTRY ─────────────────────────
-  function startInCountry(iso) {
-    state.originIso = iso;
-    const c = state.countries[iso];
-    if (!c) return;
+  // Border lists in the data are hand-written and not always mutual, and
+  // some point at territories the game doesn't track. Make them symmetric.
+  function linkBorders() {
+    for (const c of COUNTRIES_DATA) {
+      for (const b of c.borders) {
+        const a = state.countries[c.iso], d = state.countries[b];
+        if (!d || a === d) continue;
+        if (!a.borders.includes(d.iso)) a.borders.push(d.iso);
+        if (!d.borders.includes(a.iso)) d.borders.push(a.iso);
+      }
+    }
+  }
 
-    const seed = Math.max(5, Math.floor(c.pop * 0.0000008));
+  function startInCountry(iso) {
+    const c = state.countries[iso];
+    if (!c || state.phase !== 'idle') return;
+    state.originIso = iso;
+    const seed = 12;
     c.infected = seed; c.healthy = c.pop - seed; c.reached = true;
     state.totalInfected = seed; state.totalHealthy = state.totalPop - seed;
+    state.cumCases = seed;
     state.countriesInfected = 1;
-    state.phase = 'spreading';
     state.peakInfected = seed;
-
+    state.phase = 'spreading';
     awardDna(3);
     toast(`☣ ${state.diseaseName} emerges in ${c.name}`, 'info');
     startLoop();
   }
 
-  // ─── GAME LOOP ────────────────────────────────
+  // ─── REAL-TIME DRIVER ─────────────────────────
+  let timer = null, lastTs = 0, acc = 0;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
   function startLoop() {
-    if (state.tickInterval) clearInterval(state.tickInterval);
-    state.tickInterval = setInterval(tick, Math.floor(BASE_TICK_MS / state.speed));
+    stopLoop();
+    if (typeof setInterval === 'undefined') return;
+    lastTs = now(); acc = 0;
+    timer = setInterval(() => {
+      const t = now();
+      acc += Math.min(t - lastTs, 1000);
+      lastTs = t;
+      const stepMs = DAY_MS[state.speed] / STEPS_PER_DAY;
+      let n = 0;
+      while (acc >= stepMs && n < 6) { step(); acc -= stepMs; n++; }
+      if (n === 6) acc = 0; // fell behind; don't try to catch up
+    }, 30);
   }
-
-  function setSpeed(s) {
-    state.speed = s;
-    if (state.phase === 'spreading' && !state.paused) startLoop();
+  function stopLoop() {
+    if (timer) { clearInterval(timer); timer = null; }
   }
-
+  function setSpeed(s) { state.speed = DAY_MS[s] ? s : 1; }
   function setPaused(p) {
-    state.paused = p;
-    if (p) { clearInterval(state.tickInterval); state.tickInterval = null; }
-    else    { startLoop(); }
+    state.paused = !!p;
+    if (state.paused) stopLoop();
+    else if (state.phase === 'spreading') startLoop();
   }
 
-  // ─── TICK ─────────────────────────────────────
-  function tick() {
-    if (state.paused || state.phase === 'won' || state.phase === 'lost') return;
-
-    tickCount++;
-    if (tickCount % TICKS_PER_DAY === 0) {
-      state.day++;
-      // Record daily snapshot for epidemic curve
-      _history.push({
-        day:      state.day,
-        infected: state.totalInfected,
-        dead:     state.totalDead,
-        cure:     state.cureProgress,
-      });
-      if (_history.length > 300) _history.shift(); // cap at 300 days
-      if (state.day % 30 === 0) Events.onMonthTick();
-    }
-
-    const diff  = DIFFICULTIES[state.difficulty];
-    const td    = DISEASE_TYPES[state.diseaseType];
-    const dnaMod  = (td.dnaMod || 1.0) * (state.traits.has('dna_replication') ? 1.3 : 1);
-    // Symbiosis raises the detection threshold — harder to trigger cure research
-    const stealthCureTrigger = td.stealthy
-      ? (state.traits.has('symbiosis') ? 0.32 : 0.22)
-      : (state.traits.has('symbiosis') ? 0.16 : 0.10);
-    const cureMod  = td.cureMod  || 1.0;
-
-    let newInfected = 0, newDead = 0, globalNewCases = 0;
-
-    for (const iso in state.countries) {
-      const c = state.countries[iso];
-      if (!c.reached) { newInfected += c.infected; newDead += c.dead; continue; }
-
-      // ── WITHIN-COUNTRY SPREAD ──
-      const infRate = calcInfRate(c);
-      const prevalence = c.infected / c.pop;
-
-      // SIR-style: dI = beta * S * I/N — add exponential floor for small populations
-      let newCases = Math.floor(c.healthy * infRate * (prevalence + 0.00003));
-      newCases = Math.min(newCases, c.healthy);
-      if (newCases < 0) newCases = 0;
-
-      c.infected += newCases;
-      c.healthy  -= newCases;
-
-      // ── DEATHS ──
-      const lethal = calcLethalRate(c);
-      const deaths = Math.floor(c.infected * lethal);
-      const actualDeaths = Math.min(deaths, c.infected);
-      c.infected -= actualDeaths;
-      c.dead     += actualDeaths;
-
-      // Clamp
-      c.infected = Math.max(0, c.infected);
-      c.healthy  = Math.max(0, c.healthy);
-
-      c.infected_pct = c.pop > 0 ? c.infected / c.pop : 0;
-      c.dead_pct     = c.pop > 0 ? c.dead     / c.pop : 0;
-
-      if (newCases > 0 || actualDeaths > 0) _dirtyIsos.add(iso);
-
-      newInfected    += c.infected;
-      newDead        += c.dead;
-      globalNewCases += newCases;
-
-      // Cure trigger — stealthy diseases require higher severity to detect
-      if (!state.cureActive && state.severity > stealthCureTrigger && c.infected > c.pop * 0.0003) {
-        state.cureActive = true;
-        toast('🔬 Governments begin cure research!', 'cure');
-        Events.triggerNews('cure');
-      }
-
-      // Government airport/border closure
-      checkGovernmentResponse(c, diff);
-    }
-
-    state.totalInfected = newInfected;
-    state.totalDead     = newDead;
-    state.totalHealthy  = Math.max(0, state.totalPop - newInfected - newDead);
-    state.peakInfected  = Math.max(state.peakInfected, newInfected);
-    state.countriesInfected = Object.values(state.countries).filter(c => c.reached).length;
-
-    // ── DNA from infections — global, capped per tick to prevent runaway earnings
-    // Max 0.12 DNA/tick regardless of infection scale. At 3 ticks/day that's 0.36 DNA/day max.
-    if (globalNewCases > 0) {
-      state.pendingDna += Math.min(0.12, globalNewCases / 12000000) * dnaMod;
-    }
-
-    // ── SPREAD TO NEW COUNTRIES ──
-    if (tickCount % 2 === 0) spreadGlobal();
-
-    // ── CURE RESEARCH ──
-    if (state.cureActive) advanceCure(diff);
-
-    // ── DNA ──
-    if (state.pendingDna >= 1) {
-      const e = Math.floor(state.pendingDna);
-      state.pendingDna -= e;
-      awardDna(e);
-    }
-
-    // ── VIRUS MUTATION ──
-    if (td.mutationRate && Math.random() < td.mutationRate * state.speed) handleMutation();
-
-    // ── DNA BUBBLES (every 4 game days) ──
-    if (tickCount % (TICKS_PER_DAY * 4) === 0) _maybeSpawnBubble();
-
-    // ── EVENTS ──
-    tickEvents();
-    Events.onTick(state);
-
-    // ── CHECK WIN/LOSE ──
-    checkEndConditions();
-
-    // ── UI (map colors every 2 ticks, evo check every 4) ──
-    if (tickCount % 2 === 0 && Map && Map.updateColors) {
-      Map.updateColors(_dirtyIsos);
-      _dirtyIsos = new Set();
-    }
-    if (tickCount % 4 === 0) UI.checkEvoAvailable();
+  // ─── PER-COUNTRY RATES ────────────────────────
+  function climateMod(c) {
+    let m = 1;
+    if (c.climate === 'cold')          m = mods.cold >= 2 ? 1.25 : mods.cold >= 1 ? 0.80 : 0.30;
+    else if (c.climate === 'arid')     m = mods.heat >= 2 ? 1.25 : mods.heat >= 1 ? 0.80 : 0.40;
+    else if (c.climate === 'tropical') m = mods.heat >= 1 ? 1.10 : 0.90;
+    if (mods.extremophile) m = Math.max(m, 1.10);
+    if (c.climate === 'tropical') m *= 1 + mods.tropical;
+    const boost = state.eventBoosts.climateBoosts[c.climate];
+    if (boost) m *= Math.max(0.2, 1 + boost);
+    return m;
   }
 
-  // ─── INFECTIVITY for a country ────────────────
-  function calcInfRate(c) {
-    let inf = state.infectivity + state.eventBoosts.infectivity;
-
-    // Extremophile ignores ALL climate penalties/bonuses
-    if (!state.traits.has('extremophile')) {
-      // Climate resistance checks
-      const coldLv = state.traits.has('cold_resist2') ? 2 : state.traits.has('cold_resist1') ? 1 : 0;
-      const heatLv = state.traits.has('heat_resist2') ? 2 : state.traits.has('heat_resist1') ? 1 : 0;
-
-      if (c.climate === 'cold') {
-        if      (coldLv === 2) inf *= 1.35;
-        else if (coldLv === 1) inf *= 0.85;
-        else                   inf *= 0.30;
-      } else if (c.climate === 'arid') {
-        if      (heatLv === 2) inf *= 1.30;
-        else if (heatLv === 1) inf *= 0.80;
-        else                   inf *= 0.38;
-      } else if (c.climate === 'tropical') {
-        inf *= heatLv > 0 ? 1.15 : 0.88;
-      }
-    }
-
-    // Wealth
-    if (c.wealth === 'poor')   inf *= 1.35;
-    if (c.wealth === 'middle') inf *= 1.08;
-    if (c.wealth === 'rich')   inf *= 0.76;
-
-    // Urban trait bonus for dense countries
-    if (state.traits.has('urban_survival') && c.pop > 80000000) inf *= 1.12;
-
-    // Biofilm — surface contamination bonus
-    if (state.traits.has('biofilm')) inf *= 1.08;
-
-    // Government airport/border closures reduce internal spread (quarantine)
-    if (c.airportClosed) inf *= 0.88;
-
-    // Full lockdown — dramatically reduces spread
-    if (c.lockdown) inf *= 0.58;
-
-    // Climate event boosts (cold_snap, heat_wave, etc.)
-    const cb = state.eventBoosts.climateBoosts[c.climate];
-    if (cb) inf *= (1 + cb);
-
-    return Math.max(0, Math.min(inf, 0.92));
+  // Daily transmission rate inside a country.
+  function betaFor(c) {
+    const inf = clamp(state.infectivity + state.eventBoosts.infectivity, 0, 1.1);
+    let b = (T.betaBase + T.betaPerInf * inf) * climateMod(c) * T.wealthInf[c.wealth];
+    if (c.wealth === 'poor') b *= 1 + mods.poor;
+    if (c.wealth === 'rich') b *= 1 + mods.rich;
+    if (c.pop >= 80e6)       b *= 1 + mods.urban;
+    if (c.pop <  25e6)       b *= 1 + mods.rural;
+    if (c.lockdown && !c.collapsed) b *= 0.55 + 0.45 * Math.min(1, mods.lockdownResist);
+    return b;
   }
 
-  // ─── LETHALITY for a country ──────────────────
-  function calcLethalRate(c) {
-    let leth = state.lethality + state.eventBoosts.lethality;
+  // Daily death rate of the infected. Good healthcare saves people until
+  // the system is swamped; a country that is mostly dead stops coping at all.
+  function deathRateFor(c) {
+    const leth = clamp(state.lethality + state.eventBoosts.lethality, 0, 1.2);
     if (leth <= 0) return 0;
+    const deadFrac = c.dead / c.pop;
+    const strain   = Math.min(1, deadFrac * 3 + (c.infected / c.pop) * 0.5);
+    const care     = c.healthcare * (1 - strain);
+    return T.deathPerLeth * leth * (1.3 - 0.8 * care) * (1 + T.collapseDeathMult * deadFrac);
+  }
 
-    if (c.wealth === 'rich')   leth *= 0.35;
-    if (c.wealth === 'middle') leth *= 0.65;
-    if (c.wealth === 'poor')   leth *= 1.25;
+  // ─── STEP ─────────────────────────────────────
+  function step() {
+    if (state.phase !== 'spreading') return;
+    stepCount++;
+    const newDay = stepCount % STEPS_PER_DAY === 0;
 
-    // Per-tick death rate (small fraction of infected die each tick)
-    return Math.min(leth * 0.0012, 0.0025);
+    const sev = state.severity;
+    let totI = 0, totD = 0, totS = 0, totR = 0, newCases = 0, newDeaths = 0, notice = 0;
+
+    for (const c of countryList) {
+      if (c.infected > 0) {
+        const alive = c.pop - c.dead;
+        if (!state.cureDeployed && c.healthy > 0) {
+          const n = sample(betaFor(c) * c.infected * (c.healthy / alive) * DT, c.healthy);
+          c.infected += n; c.healthy -= n; newCases += n;
+        }
+        const d = sample(deathRateFor(c) * c.infected * DT, c.infected);
+        c.infected -= d; c.dead += d; newDeaths += d;
+
+        if (state.cureDeployed && c.infected > 0) {
+          const cured = Math.min(c.infected, Math.max(1, Math.ceil(c.infected * T.cureDeployRate * DT)));
+          c.infected -= cured; c.immune += cured;
+        }
+        dirty.add(c.iso);
+      }
+      totI += c.infected; totD += c.dead; totS += c.healthy; totR += c.immune;
+      notice += c.healthcare * (c.infected * (0.002 + sev * 0.5) + c.dead * 20);
+    }
+
+    state.totalInfected = totI;
+    state.totalDead     = totD;
+    state.totalHealthy  = totS + totR;
+    state.cumCases     += newCases;
+    if (totI > state.peakInfected) state.peakInfected = totI;
+
+    earnDna(newCases, newDeaths);
+    updateDetection(notice);
+    if (state.cureActive && !state.cureDeployed) advanceCure();
+
+    if (newDay) dayTick();
+
+    checkEnd(totS);
+
+    emit('step', { dirty });
+    dirty = new Set();
+  }
+
+  function dayTick() {
+    state.day++;
+    tickEvents();
+    spreadBetweenCountries();
+    if (state.cureActive) governmentResponse();
+    rollMutation();
+    rollWorldEvent();
+    if (state.day % 6 === 0) maybeSpawnBubble();
+    recordHistory();
+    emit('day', { day: state.day });
+    if (state.day - lastAutosaveDay >= AUTOSAVE_DAYS) { lastAutosaveDay = state.day; saveGame(); }
+  }
+
+  // ─── DNA ──────────────────────────────────────
+  // Income follows the order of magnitude of the outbreak rather than raw
+  // case counts, so going from 1K to 10K cases is worth as much as 1B to 10B.
+  function earnDna(newCases, newDeaths) {
+    if (newCases <= 0 && newDeaths <= 0) return;
+    const td   = DISEASE_TYPES[state.diseaseType];
+    const diff = DIFFICULTIES[state.difficulty];
+    const rate = (td.dnaMod || 1) * (1 + mods.dnaRate) * (diff.dnaMult || 1);
+    const lg   = x => Math.log10(1 + x);
+    const cum  = state.cumCases, dead = state.totalDead;
+    state.pendingDna += rate * (
+      2.5 * (lg(cum / 100)   - lg((cum - newCases)   / 100)) +
+      1.5 * (lg(dead / 1000) - lg((dead - newDeaths) / 1000))
+    );
+    if (state.pendingDna >= 1) {
+      const whole = Math.floor(state.pendingDna);
+      state.pendingDna -= whole;
+      awardDna(whole);
+    }
+  }
+
+  function awardDna(amount) {
+    if (amount <= 0) return;
+    state.dna += amount;
+    emit('dna', { amount });
+  }
+
+  // ─── DETECTION ────────────────────────────────
+  // The world notices a disease through visible illness and deaths in places
+  // with working healthcare. Mild pathogens get a long head start.
+  function detectionThreshold() {
+    const td   = DISEASE_TYPES[state.diseaseType];
+    const diff = DIFFICULTIES[state.difficulty];
+    return T.detectThreshold * diff.detectMult * (td.stealthy ? 2.5 : 1) * (1 + mods.stealth);
+  }
+
+  function updateDetection(notice) {
+    if (state.cureActive) { state.detection = 1; return; }
+    state.detection = Math.min(1, notice / detectionThreshold());
+    if (state.detection >= 1) {
+      state.cureActive = true;
+      toast(`🔬 ${state.diseaseName} has been identified. Cure research begins.`, 'cure');
+      emit('cureStart');
+      emit('news', { category: 'cure' });
+    }
+  }
+
+  // ─── CURE ─────────────────────────────────────
+  function advanceCure() {
+    const sev = state.severity;
+    let effort = 0, maxEffort = 0;
+    for (const c of countryList) {
+      const w = c.healthcare * T.wealthCure[c.wealth] * Math.sqrt(c.pop);
+      const working = Math.max(0, (c.pop - c.dead - c.infected * Math.min(1, sev * 1.5)) / c.pop);
+      maxEffort += w;
+      effort    += w * working * working;
+    }
+    // A disease nobody is dying from doesn't get wartime funding.
+    const infFrac  = state.totalInfected / state.totalPop;
+    const deadFrac = state.totalDead / state.totalPop;
+    const priority = clamp(0.3 + 0.7 * Math.min(1, infFrac * sev * 4 + deadFrac * 30), 0.3, 1);
+
+    const td     = DISEASE_TYPES[state.diseaseType];
+    const diff   = DIFFICULTIES[state.difficulty];
+    const resist = Math.min(0.92, state.cureResist + state.eventBoosts.cureResist);
+    const perDay = T.cureBase * diff.cureSpeed * (td.cureMod || 1) *
+                   (effort / maxEffort) * priority * (1 - resist);
+
+    state.cureProgress = Math.min(100, state.cureProgress + perDay * DT);
+    if (state.cureProgress >= 100) {
+      state.cureDeployed = true;
+      toast('💉 The cure is complete and being distributed worldwide.', 'cure');
+      emit('news', { category: 'cure' });
+    }
   }
 
   // ─── GOVERNMENT RESPONSE ──────────────────────
-  function checkGovernmentResponse(c, diff) {
-    // Close airports when infected % crosses threshold
-    if (!c.airportClosed && c.airports > 0) {
-      const threshold = c.wealth === 'rich'   ? 0.002 :
-                        c.wealth === 'middle' ? 0.008 : 0.02;
-      if (c.infected_pct > threshold * diff.cureSpeed) {
+  function governmentResponse() {
+    const diff = DIFFICULTIES[state.difficulty];
+    const sev  = state.severity;
+    const worldPanic = (state.totalDead / state.totalPop) * 20 +
+                       (state.totalInfected / state.totalPop) * sev * 2;
+
+    for (const c of countryList) {
+      if (c.collapsed) continue;
+
+      if (c.dead / c.pop > 0.5) { // nobody left to enforce anything
+        c.collapsed = true;
+        c.lockdown = false;
+        emit('gov', { iso: c.iso, kind: 'collapse' });
+        if (c.pop >= 50e6) toast(`🏚 Government of ${c.name} has collapsed`, 'alert');
+        continue;
+      }
+
+      if (!c.reached) {
+        // Untouched countries may seal themselves off once the world panics.
+        if (worldPanic > 0.05 && !(c.airportClosed && c.portClosed)) {
+          const wealthBias = c.wealth === 'rich' ? 1.5 : c.wealth === 'middle' ? 1 : 0.5;
+          if (rand() < Math.min(0.05, worldPanic * 0.05) * diff.response * wealthBias) {
+            c.airportClosed = true; c.portClosed = true;
+            emit('gov', { iso: c.iso, kind: 'sealed' });
+            toast(`🚫 ${c.name} seals its airports and ports`, 'warn');
+          }
+        }
+        continue;
+      }
+
+      const alarm = (c.infected * (sev + 0.02) + c.dead * 10) / c.pop * diff.response;
+      const thr   = T.alarmThresh[c.wealth];
+      const loud  = c.pop >= 50e6;
+
+      if (!c.airportClosed && c.airports > 0 && alarm > thr) {
         c.airportClosed = true;
-        toast(`✈️ ${c.name} closes its airports`, 'warn');
-        Events.triggerNews('spreading');
+        emit('gov', { iso: c.iso, kind: 'airports' });
+        if (loud) toast(`✈️ ${c.name} closes its airports`, 'warn');
       }
-    }
-
-    // Declare full lockdown at higher infection levels
-    if (!c.lockdown) {
-      const lockThreshold = c.wealth === 'rich'   ? 0.015 :
-                            c.wealth === 'middle' ? 0.05  : 0.12;
-      if (c.infected_pct > lockThreshold * diff.cureSpeed) {
+      if (!c.portClosed && c.ports > 0 && alarm > thr * 2.5) {
+        c.portClosed = true;
+        emit('gov', { iso: c.iso, kind: 'ports' });
+      }
+      if (!c.borderClosed && alarm > thr * 4) {
+        c.borderClosed = true;
+        emit('gov', { iso: c.iso, kind: 'borders' });
+      }
+      if (!c.lockdown && alarm > thr * 8) {
         c.lockdown = true;
-        toast(`🔒 ${c.name} enters full national lockdown`, 'warn');
-        Events.triggerNews('spreading');
+        emit('gov', { iso: c.iso, kind: 'lockdown' });
+        if (loud) toast(`🔒 ${c.name} enters national lockdown`, 'warn');
       }
     }
   }
 
-  // ─── GLOBAL SPREAD ────────────────────────────
-  function spreadGlobal() {
-    const travelBonus = state.traits.has('travel_adaptation') ? 1.35 : 1;
-    const travelMult = state.eventBoosts.travelMult * (state.airportsOpen ? 1 : 0.4) * travelBonus;
+  // ─── SPREAD BETWEEN COUNTRIES ─────────────────
+  const canReceive = c => c.infected === 0 && c.healthy > 0;
 
-    for (const iso in state.countries) {
-      const src = state.countries[iso];
-      if (!src.reached || src.infected < 200) continue;
+  function spreadBetweenCountries() {
+    if (state.cureDeployed) return;
+    const leak   = Math.min(0.5, T.leak + mods.leak);
+    const travel = state.eventBoosts.travelMult;
+    const td     = DISEASE_TYPES[state.diseaseType];
 
-      const srcPrev = src.infected_pct;
+    let airTargets = null, seaTargets = null;
 
-      // ── LAND BORDERS ──
-      if (!state.bordersClosed && !src.bordersClosed) {
-        for (const bIso of src.borders) {
-          const dst = state.countries[bIso];
-          if (!dst || dst.reached) continue;
-          const chance = 0.009 * Math.min(srcPrev * 6, 1) * travelMult;
-          if (Math.random() < chance) infectNewCountry(dst, 'land border', src.iso);
+    for (const src of countryList) {
+      if (src.infected < 50) continue;
+      const prev     = src.infected / (src.pop - src.dead);
+      const strength = Math.min(1, Math.sqrt(prev) * 1.6) * travel;
+      const enforced = !src.collapsed;
+
+      // Land
+      const srcLand = src.borderClosed && enforced ? leak * 3 : 1;
+      for (const iso of src.borders) {
+        const dst = state.countries[iso];
+        if (!canReceive(dst)) continue;
+        const dstLand = dst.borderClosed && !dst.collapsed ? leak * 3 : 1;
+        if (rand() < T.land * strength * (1 + mods.land) * srcLand * dstLand) {
+          seedCountry(dst, 'land border', src.iso);
         }
       }
 
-      // ── AIR TRAVEL ──
-      if (src.airports > 0 && !src.airportClosed) {
-        const chance = 0.002 * src.airports * Math.min(srcPrev * 4, 1) * travelMult;
-        if (Math.random() < chance) {
-          const dst = pickUninfectedWithAirports();
-          if (dst) infectNewCountry(dst, 'air travel', src.iso);
+      // Air: collapsed countries have no functioning airlines
+      if (src.airports > 0) {
+        const gate = src.collapsed ? 0.1 : src.airportClosed ? leak : 1;
+        if (rand() < T.air * src.airports * strength * (1 + mods.air) * gate) {
+          airTargets = airTargets || countryList.filter(c => c.airports > 0 && canReceive(c));
+          const dst = weightedPick(airTargets, c => c.airports * c.airports);
+          if (dst && canReceive(dst) && (!dst.airportClosed || dst.collapsed || rand() < leak)) {
+            seedCountry(dst, 'air travel', src.iso);
+          }
         }
       }
 
-      // ── SEA TRAVEL ──
+      // Sea
       if (src.ports > 0) {
-        const chance = 0.0011 * src.ports * Math.min(srcPrev * 3, 1) * travelMult;
-        if (Math.random() < chance) {
-          const dst = pickUninfectedWithPorts();
-          if (dst) infectNewCountry(dst, 'sea route', src.iso);
+        const gate = src.collapsed ? 0.2 : src.portClosed ? leak : 1;
+        if (rand() < T.sea * src.ports * strength * (1 + mods.sea) * gate) {
+          seaTargets = seaTargets || countryList.filter(c => c.ports > 0 && canReceive(c));
+          const dst = weightedPick(seaTargets, c => c.ports);
+          if (dst && canReceive(dst) && (!dst.portClosed || dst.collapsed || rand() < leak)) {
+            seedCountry(dst, 'sea route', src.iso);
+          }
         }
       }
     }
 
-    // Fungus spore burst (random long-range jump)
-    if (DISEASE_TYPES[state.diseaseType].sporeBurst && Math.random() < 0.006 * state.speed) {
-      const dst = pickUninfected();
-      const infectedArr = _getInfected();
-      const sporeSrc = infectedArr.length ? infectedArr[Math.floor(Math.random() * infectedArr.length)] : null;
-      if (dst) { infectNewCountry(dst, 'spore dispersal', sporeSrc?.iso); }
-    }
-  }
-
-  function infectNewCountry(dst, method, srcIso) {
-    const seed = Math.max(8, Math.floor(dst.pop * 0.0000007));
-    dst.infected = seed; dst.healthy = dst.pop - seed; dst.reached = true;
-    state.countriesInfected++;
-    _invalidateCountryCache(); // newly infected country changes all cached lists
-    _dirtyIsos.add(dst.iso);
-
-    // DNA bonus scales with country population size
-    const dnaBonusPop = dst.pop >= 100e6 ? 4 : dst.pop >= 20e6 ? 3 : dst.pop >= 5e6 ? 2 : 1;
-    toast(`🌍 ${state.diseaseName} spreads to ${dst.name} via ${method}`, 'info');
-    if (typeof AudioEngine !== 'undefined') AudioEngine.sfxNewCountry();
-    Events.triggerNews('spreading');
-    awardDna(dnaBonusPop);
-    if (Map && Map.pulseCountry) Map.pulseCountry(dst.iso);
-    if (Map && Map.showTravelRoute && srcIso != null) Map.showTravelRoute(srcIso, dst.iso, method);
-  }
-
-  function pickUninfected() {
-    const arr = _getUninfectedAll();
-    return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
-  }
-  function pickUninfectedWithAirports() {
-    const arr = _getUninfectedAir();
-    if (!arr.length) return null;
-    // Weight by airport count — major hubs more likely (cached totalWeight)
-    let totalWeight = 0;
-    for (const c of arr) totalWeight += c.airports * c.airports;
-    let r = Math.random() * totalWeight;
-    for (const c of arr) { r -= c.airports * c.airports; if (r <= 0) return c; }
-    return arr[arr.length - 1];
-  }
-  function pickUninfectedWithPorts() {
-    const arr = _getUninfectedPort();
-    if (!arr.length) return null;
-    let totalWeight = 0;
-    for (const c of arr) totalWeight += c.ports;
-    let r = Math.random() * totalWeight;
-    for (const c of arr) { r -= c.ports; if (r <= 0) return c; }
-    return arr[arr.length - 1];
-  }
-
-  // ─── CURE RESEARCH ────────────────────────────
-  function advanceCure(diff) {
-    let rate = 0;
-    for (const iso in state.countries) {
-      const c = state.countries[iso];
-      if (c.reached || c.dead > 0) {
-        rate += c.cureContrib;
-        // More countries aware = faster cure
-        if (c.infected_pct > 0.01) rate += c.cureContrib * 0.5;
+    // Fungal spores ignore borders entirely.
+    if (td.sporeBurst && rand() < 0.012) {
+      const open    = countryList.filter(canReceive);
+      const sources = countryList.filter(c => c.infected > 1000);
+      if (open.length && sources.length) {
+        seedCountry(open[Math.floor(rand() * open.length)], 'spore dispersal',
+                    sources[Math.floor(rand() * sources.length)].iso);
       }
     }
-
-    // Severity awareness multiplier
-    rate *= (1 + state.severity * 1.8);
-
-    // Difficulty
-    rate *= diff.cureSpeed;
-
-    // Disease-specific cure modifier (prions hard to cure, nano-virus easy)
-    rate *= DISEASE_TYPES[state.diseaseType].cureMod || 1.0;
-
-    // Resistance
-    const resist = Math.min(0.88, state.cureResist + state.eventBoosts.cureResist);
-    rate *= (1 - resist);
-
-    // Cap per tick
-    rate = Math.min(rate, 0.10);
-    state.cureProgress = Math.min(100, state.cureProgress + rate);
-
-    UI.updateCureBar(state.cureProgress);
   }
 
-  // ─── VIRUS MUTATION ───────────────────────────
-  function handleMutation() {
-    const allTraits = [
-      ...EVOLUTION_TREE.transmissions,
-      ...EVOLUTION_TREE.symptoms,
-      ...EVOLUTION_TREE.abilities,
-    ].filter(t => !state.traits.has(t.id) && t.requires.every(r => state.traits.has(r)));
+  function weightedPick(arr, weightOf) {
+    let total = 0;
+    for (const c of arr) total += weightOf(c);
+    if (total <= 0) return null;
+    let r = rand() * total;
+    for (const c of arr) { r -= weightOf(c); if (r <= 0) return c; }
+    return arr[arr.length - 1];
+  }
 
-    if (!allTraits.length) return;
-    const t = allTraits[Math.floor(Math.random() * allTraits.length)];
-    applyEffects(t, 0.25);
-    toast(`🧬 Mutation! ${t.name} partially evolved`, 'dna');
-    UI.updateStatBars();
+  function seedCountry(dst, method, srcIso) {
+    const seed = Math.min(dst.healthy, 1 + poisson(T.seedMean));
+    dst.infected += seed; dst.healthy -= seed;
+    state.cumCases += seed;
+    dirty.add(dst.iso);
+    if (dst.reached) return; // re-seeding a country where it died out
+
+    dst.reached = true;
+    state.countriesInfected++;
+    toast(`🌍 ${state.diseaseName} reaches ${dst.name} via ${method}`, 'info');
+    emit('country', { iso: dst.iso, method, srcIso });
+    emit('news', { category: 'spreading' });
+    awardDna(dst.pop >= 100e6 ? 2 : 1);
+  }
+
+  // ─── MUTATION ─────────────────────────────────
+  // Uncontrolled mutation only ever produces symptoms: free, but they make
+  // the disease easier to notice. They can be devolved for no refund.
+  function rollMutation() {
+    const td = DISEASE_TYPES[state.diseaseType];
+    if (!td.mutationRate || rand() >= td.mutationRate) return;
+    const options = EVOLUTION_TREE.symptoms.filter(t =>
+      !state.traits.has(t.id) && t.requires.every(r => state.traits.has(r)));
+    if (!options.length) return;
+    const t = options[Math.floor(rand() * options.length)];
+    state.traits.add(t.id);
+    state.freeTraits.add(t.id);
+    recomputeStats();
+    toast(`🧬 ${state.diseaseName} mutated: ${t.name}`, 'dna');
+    emit('traits', { mutated: t.id });
+  }
+
+  // ─── WORLD EVENTS ─────────────────────────────
+  function rollWorldEvent() {
+    const candidates = WORLD_EVENTS.filter(ev => {
+      if (ev.types && !ev.types.includes(state.diseaseType)) return false;
+      if (ev.effect.cureBoost && (!state.cureActive || state.cureDeployed)) return false;
+      if (state.activeEvents.some(a => a.id === ev.id)) return false;
+      return rand() < ev.prob;
+    });
+    if (!candidates.length) return;
+    const ev = candidates[Math.floor(rand() * candidates.length)];
+
+    toast(ev.msg, ev.type);
+    emit('news', { category: 'events' });
+    if (ev.effect.cureBoost) {
+      state.cureProgress = Math.min(99, state.cureProgress + ev.effect.cureBoost);
+    } else if (ev.effect.dnaBonus) {
+      awardDna(ev.effect.dnaBonus);
+    } else {
+      state.activeEvents.push({ id: ev.id, effect: ev.effect, remaining: ev.effect.days });
+      rebuildEventBoosts();
+    }
+  }
+
+  function tickEvents() {
+    if (!state.activeEvents.length) return;
+    state.activeEvents = state.activeEvents.filter(ev => --ev.remaining > 0);
+    rebuildEventBoosts();
+  }
+
+  function rebuildEventBoosts() {
+    const b = emptyBoosts();
+    for (const { effect: e } of state.activeEvents) {
+      if (e.infectivityBoost) b.infectivity += e.infectivityBoost;
+      if (e.cureResist)       b.cureResist  += e.cureResist;
+      if (e.lethalityBoost)   b.lethality   += e.lethalityBoost;
+      if (e.travelMult)       b.travelMult   = Math.max(0.1, b.travelMult * e.travelMult);
+      if (e.climateBoost) {
+        for (const k in e.climateBoost) b.climateBoosts[k] = (b.climateBoosts[k] || 0) + e.climateBoost[k];
+      }
+    }
+    state.eventBoosts = b;
   }
 
   // ─── DNA BUBBLES ──────────────────────────────
-  function _maybeSpawnBubble() {
+  function maybeSpawnBubble() {
+    state.bubbles = state.bubbles.filter(b => b.expiresDay > state.day);
     if (state.bubbles.length >= 4) return;
-    const infected = Object.values(state.countries).filter(
-      c => c.reached && c.infected > 5000
-    );
-    if (!infected.length) return;
-
-    const c = infected[Math.floor(Math.random() * infected.length)];
+    const hosts = countryList.filter(c => c.infected > 5000);
+    if (!hosts.length) return;
+    const c      = hosts[Math.floor(rand() * hosts.length)];
     const infPct = c.infected / c.pop;
-    const value = infPct > 0.25 ? 3 : infPct > 0.05 ? 2 : 1;
-
-    const id = state.nextBubbleId++;
-    // Spread bubbles using golden angle so they don't overlap
-    const angle = (id * 137.508) % 360 * (Math.PI / 180);
+    const id     = state.nextBubbleId++;
+    const angle  = (id * 137.508) % 360 * (Math.PI / 180); // golden angle keeps them apart
     const radius = 10 + (id % 3) * 5;
     state.bubbles.push({
-      id,
-      iso: c.iso,
-      value,
-      expiresDay: state.day + 10,
-      dx: Math.cos(angle) * radius,
-      dy: Math.sin(angle) * radius,
+      id, iso: c.iso,
+      value: infPct > 0.2 ? 2 : 1,
+      expiresDay: state.day + 12,
+      dx: Math.cos(angle) * radius, dy: Math.sin(angle) * radius,
     });
   }
 
   function collectBubble(id) {
-    const idx = state.bubbles.findIndex(b => b.id === id);
-    if (idx === -1) return 0;
-    const val = state.bubbles[idx].value;
-    state.bubbles.splice(idx, 1);
+    const i = state.bubbles.findIndex(b => b.id === id);
+    if (i === -1) return 0;
+    const val = state.bubbles[i].value;
+    state.bubbles.splice(i, 1);
     awardDna(val);
     return val;
   }
 
   function getBubbles() {
-    // Expire old bubbles
-    state.bubbles = state.bubbles.filter(b => b.expiresDay > state.day);
-    return [...state.bubbles];
+    return state.bubbles.filter(b => b.expiresDay > state.day);
   }
 
-  // ─── EVENTS TICK ──────────────────────────────
-  function tickEvents() {
-    state.eventBoosts = { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} };
-    state.activeEvents = state.activeEvents.filter(ev => {
-      ev.remaining--;
-      if (ev.remaining <= 0) return false;
-      if (ev.effect.infectivityBoost) state.eventBoosts.infectivity += ev.effect.infectivityBoost;
-      if (ev.effect.cureResist)       state.eventBoosts.cureResist  += ev.effect.cureResist;
-      if (ev.effect.travelMult)       state.eventBoosts.travelMult  = Math.max(0.1, state.eventBoosts.travelMult * ev.effect.travelMult);
-      if (ev.effect.lethalityBoost)   state.eventBoosts.lethality   += ev.effect.lethalityBoost;
-      if (ev.effect.climateBoost) {
-        for (const [climate, val] of Object.entries(ev.effect.climateBoost)) {
-          state.eventBoosts.climateBoosts[climate] = (state.eventBoosts.climateBoosts[climate] || 0) + val;
-        }
-      }
-      return true;
-    });
-  }
-
-  // ─── WIN / LOSE ───────────────────────────────
-  function checkEndConditions() {
-    // Win: everyone dead
-    if (state.totalHealthy <= 0 && state.totalInfected <= 0 && state.totalDead > 0) {
-      endGame(true); return;
+  // ─── HISTORY ──────────────────────────────────
+  let prevSnap = null;
+  function recordHistory() {
+    const snap = { day: state.day, infected: state.totalInfected, dead: state.totalDead,
+                   healthy: state.totalHealthy, cure: state.cureProgress };
+    if (prevSnap) {
+      state.rates = {
+        infected: snap.infected - prevSnap.infected,
+        dead:     snap.dead     - prevSnap.dead,
+        cure:     snap.cure     - prevSnap.cure,
+      };
     }
-
-    // Also win if dead >= 99.9% of pop
-    if (state.totalDead >= state.totalPop * 0.999) {
-      endGame(true); return;
-    }
-
-    // Lose: cure complete → rapidly cure infected
-    if (state.cureProgress >= 100) {
-      if (state.totalInfected <= 0) { endGame(false); return; }
-      deployCure();
+    prevSnap = snap;
+    if (state.day % historyStride !== 0) return;
+    history.push(snap);
+    if (history.length > 720) { // halve the resolution rather than forget the start
+      history = history.filter((_, i) => i % 2 === 1);
+      historyStride *= 2;
     }
   }
 
-  function deployCure() {
-    // Rapidly cure remaining infected
-    for (const iso in state.countries) {
-      const c = state.countries[iso];
-      if (c.infected <= 0) continue;
-      const cured = Math.ceil(c.infected * 0.12);
-      c.infected -= cured; c.healthy += cured;
-      if (c.infected < 0) c.infected = 0;
-    }
-    state.totalInfected = Object.values(state.countries).reduce((a, c) => a + c.infected, 0);
-    if (state.totalInfected <= 0) endGame(false);
+  // ─── END CONDITIONS ───────────────────────────
+  function checkEnd(susceptible) {
+    if (state.totalInfected > 0) return;
+    if (state.totalHealthy <= 0)      endGame(true,  'extinct');
+    else if (state.cureDeployed)      endGame(false, 'cured');
+    else if (susceptible > 0)         endGame(false, 'burnout');
   }
 
-  function endGame(won) {
-    if (state.phase === 'won' || state.phase === 'lost') return;
-    state.phase = won ? 'won' : 'lost';
-    clearInterval(state.tickInterval); state.tickInterval = null;
-    if (typeof AudioEngine !== 'undefined') {
-      won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
-    }
-    setTimeout(() => UI.showGameOver(won, state), 1200);
+  function endGame(won, reason) {
+    if (state.phase !== 'spreading') return;
+    state.phase     = won ? 'won' : 'lost';
+    state.endReason = reason;
+    stopLoop();
+    clearSave();
+    emit('end', { won, reason });
   }
 
-  // ─── BUY / DEVOLVE TRAIT ─────────────────────
-  function buyTrait(traitId) {
-    const trait = findTrait(traitId);
-    if (!trait) return { ok: false, msg: 'Unknown trait' };
-    if (state.traits.has(traitId)) return { ok: false, msg: 'Already owned' };
+  // ─── BUY / DEVOLVE ────────────────────────────
+  function buyTrait(id) {
+    const trait = TRAITS[id];
+    if (!trait)                return { ok: false, msg: 'Unknown trait' };
+    if (state.traits.has(id))  return { ok: false, msg: 'Already owned' };
     if (trait.requires.some(r => !state.traits.has(r))) return { ok: false, msg: 'Requirements not met' };
     if (state.dna < trait.cost) return { ok: false, msg: 'Not enough DNA' };
 
     state.dna      -= trait.cost;
     state.dnaSpent += trait.cost;
-    state.traits.add(traitId);
-    applyEffects(trait, 1.0);
-
+    state.traits.add(id);
+    recomputeStats();
     toast(`⚡ Evolved: ${trait.name}`, 'dna');
-    UI.updateDnaDisplay();
-    UI.updateStatBars();
-    Evolution.refreshTree();
+    emit('traits', { bought: id });
     return { ok: true };
   }
 
-  function devolveTrait(traitId) {
-    const trait = findTrait(traitId);
-    if (!trait || !state.traits.has(traitId)) return { ok: false, msg: 'Not owned' };
-
-    // Check nothing depends on this trait
-    const allTraits = getAllTraits();
-    const dependants = allTraits.filter(t =>
-      t.requires.includes(traitId) && state.traits.has(t.id)
-    );
-    if (dependants.length > 0) {
-      return { ok: false, msg: `Devolve ${dependants.map(d=>d.name).join(', ')} first` };
+  function devolveTrait(id) {
+    const trait = TRAITS[id];
+    if (!trait || !state.traits.has(id)) return { ok: false, msg: 'Not owned' };
+    const dependants = ALL_TRAITS.filter(t => t.requires.includes(id) && state.traits.has(t.id));
+    if (dependants.length) {
+      return { ok: false, msg: `Devolve ${dependants.map(d => d.name).join(', ')} first` };
     }
-
-    // Refund 50%
-    const refund = Math.max(1, Math.floor(trait.cost * 0.5));
-    state.traits.delete(traitId);
-    reverseEffects(trait);
-
+    const wasFree = state.freeTraits.has(id);
+    const refund  = wasFree ? 0 : Math.max(1, Math.floor(trait.cost * 0.5));
+    state.traits.delete(id);
+    state.freeTraits.delete(id);
     state.dna      += refund;
     state.dnaSpent -= refund;
-
-    toast(`↩ Devolved: ${trait.name} (+${refund} DNA)`, 'warn');
-    UI.updateDnaDisplay();
-    UI.updateStatBars();
-    Evolution.refreshTree();
+    recomputeStats();
+    toast(`↩ Devolved: ${trait.name}${refund ? ` (+${refund} DNA)` : ''}`, 'warn');
+    emit('traits', { devolved: id });
     return { ok: true };
-  }
-
-  function applyEffects(trait, mult) {
-    const e = trait.effects || {};
-    if (e.infectivity != null && e.infectivity !== 0)
-      state.infectivity = Math.max(0, Math.min(0.95, state.infectivity + e.infectivity * mult));
-    if (e.severity    != null && e.severity    !== 0)
-      state.severity    = Math.max(0, Math.min(1.00, state.severity    + e.severity    * mult));
-    if (e.lethality   != null && e.lethality   !== 0)
-      state.lethality   = Math.max(0, Math.min(1.00, state.lethality   + e.lethality   * mult));
-    if (e.cureResist  != null && e.cureResist  !== 0)
-      state.cureResist  = Math.max(0, Math.min(0.90, state.cureResist  + e.cureResist  * mult));
-  }
-
-  function reverseEffects(trait) {
-    // Rebuild stats from scratch from remaining traits
-    state.infectivity = state.baseInfectivity;
-    state.severity    = state.baseSeverity;
-    state.lethality   = 0;
-    state.cureResist  = 0;
-    for (const id of state.traits) {
-      const t = findTrait(id);
-      if (t) applyEffects(t, 1.0);
-    }
-  }
-
-  function findTrait(id) {
-    return getAllTraits().find(t => t.id === id) || null;
-  }
-  function getAllTraits() {
-    return [
-      ...EVOLUTION_TREE.transmissions,
-      ...EVOLUTION_TREE.symptoms,
-      ...EVOLUTION_TREE.abilities,
-    ];
-  }
-
-  // ─── DNA ──────────────────────────────────────
-  function awardDna(amount) {
-    state.dna += amount;
-    UI.showDnaPopup(amount);
-    UI.updateDnaDisplay();
-    if (typeof AudioEngine !== 'undefined' && amount >= 2) AudioEngine.sfxDNA();
-  }
-
-  // ─── TOAST ────────────────────────────────────
-  function toast(msg, type) {
-    state.notifications.push(msg);
-    UI.toast(msg, type);
   }
 
   // ─── SAVE / LOAD ──────────────────────────────
-  const SAVE_KEY = 'pathogen_save_v1';
+  function storage() {
+    try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; }
+  }
+
+  function serialize() {
+    return {
+      version: SAVE_VERSION, savedAt: Date.now(),
+      state: { ...state, traits: [...state.traits], freeTraits: [...state.freeTraits] },
+      rngState, stepCount, history, historyStride,
+    };
+  }
 
   function saveGame() {
-    if (state.phase !== 'spreading') return false;
-    try {
-      const payload = {
-        version: 1,
-        savedAt: Date.now(),
-        diseaseName:    state.diseaseName,
-        diseaseType:    state.diseaseType,
-        difficulty:     state.difficulty,
-        infectivity:    state.infectivity,
-        severity:       state.severity,
-        lethality:      state.lethality,
-        cureResist:     state.cureResist,
-        baseInfectivity:state.baseInfectivity,
-        baseSeverity:   state.baseSeverity,
-        totalPop:       state.totalPop,
-        totalInfected:  state.totalInfected,
-        totalDead:      state.totalDead,
-        cureProgress:   state.cureProgress,
-        cureActive:     state.cureActive,
-        day:            state.day,
-        countriesInfected: state.countriesInfected,
-        peakInfected:   state.peakInfected,
-        dna:            state.dna,
-        dnaSpent:       state.dnaSpent,
-        traits:         [...state.traits],
-        countries:      state.countries,
-        airportsOpen:   state.airportsOpen,
-        bordersClosed:  state.bordersClosed,
-        activeEvents:   state.activeEvents,
-        eventBoosts:    state.eventBoosts,
-        originIso:      state.originIso,
-        speed:          state.speed,
-      };
-      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
-      return true;
-    } catch (e) {
-      console.error('Save failed:', e);
-      return false;
-    }
+    const ls = storage();
+    if (!ls || state.phase !== 'spreading') return false;
+    try { ls.setItem(SAVE_KEY, JSON.stringify(serialize())); return true; }
+    catch (e) { return false; }
   }
 
   function loadSave(data) {
-    const d = data || JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (!d || d.version !== 1) return false;
-    if (state.tickInterval) { clearInterval(state.tickInterval); state.tickInterval = null; }
-    state.diseaseName    = d.diseaseName    || 'Unnamed';
-    state.diseaseType    = d.diseaseType    || 'bacteria';
-    state.difficulty     = d.difficulty     || 'normal';
-    state.infectivity    = d.infectivity    ?? 0.18;
-    state.severity       = d.severity       ?? 0.04;
-    state.lethality      = d.lethality      ?? 0;
-    state.cureResist     = d.cureResist     ?? 0;
-    state.baseInfectivity= d.baseInfectivity ?? 0.18;
-    state.baseSeverity   = d.baseSeverity   ?? 0.04;
-    state.totalPop       = d.totalPop       || 0;
-    state.totalInfected  = d.totalInfected  || 0;
-    state.totalDead      = d.totalDead      || 0;
-    state.cureProgress   = d.cureProgress   || 0;
-    state.cureActive     = d.cureActive     || false;
-    state.day            = d.day            || 0;
-    state.countriesInfected = d.countriesInfected || 0;
-    state.peakInfected   = d.peakInfected   || 0;
-    state.dna            = d.dna            || 0;
-    state.dnaSpent       = d.dnaSpent       || 0;
-    state.traits         = new Set(d.traits || []);
-    state.countries      = d.countries      || {};
-    state.airportsOpen   = d.airportsOpen   ?? true;
-    state.bordersClosed  = d.bordersClosed  ?? false;
-    state.activeEvents   = d.activeEvents   || [];
-    state.eventBoosts    = d.eventBoosts    || { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} };
-    state.originIso      = d.originIso      || null;
-    state.speed          = d.speed          || 1;
-    state.phase          = 'spreading';
-    state.paused         = true;
-    state.tickInterval   = null;
-    state.pendingDna     = 0;
-    state.totalHealthy   = state.totalPop - state.totalInfected - state.totalDead;
-    state.bubbles        = [];
-    state.nextBubbleId   = 0;
+    let d = data;
+    if (!d) {
+      const ls = storage();
+      try { d = ls && JSON.parse(ls.getItem(SAVE_KEY)); } catch { d = null; }
+    }
+    if (!d || d.version !== SAVE_VERSION || !d.state || !DISEASE_TYPES[d.state.diseaseType]) return false;
+
+    stopLoop();
+    Object.assign(state, d.state);
+    state.traits     = new Set(d.state.traits);
+    state.freeTraits = new Set(d.state.freeTraits);
+    state.paused     = true;
+    rngState      = d.rngState;
+    stepCount     = d.stepCount;
+    history       = d.history || [];
+    historyStride = d.historyStride || 1;
+    prevSnap      = history[history.length - 1] || null;
+    countryList   = Object.values(state.countries);
+    dirty         = new Set();
+    lastAutosaveDay = state.day;
+    recomputeStats();
+    rebuildEventBoosts();
     return true;
   }
 
-  function hasSave() {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; }
-  }
-
-  function clearSave() {
-    try { localStorage.removeItem(SAVE_KEY); } catch {}
-  }
-
+  function hasSave()   { return !!getSaveMeta(); }
+  function clearSave() { const ls = storage(); try { ls && ls.removeItem(SAVE_KEY); } catch {} }
   function getSaveMeta() {
+    const ls = storage();
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      return { day: d.day, diseaseName: d.diseaseName, savedAt: d.savedAt };
+      const d = ls && JSON.parse(ls.getItem(SAVE_KEY));
+      if (!d || d.version !== SAVE_VERSION) return null;
+      return { day: d.state.day, diseaseName: d.state.diseaseName, savedAt: d.savedAt };
     } catch { return null; }
   }
 
-  // ─── PUBLIC ───────────────────────────────────
-  function getState()           { return state; }
-  function getCountry(iso)      { return state.countries[iso] || null; }
-  function getAllCountries()     { return Object.values(state.countries); }
+  // ─── READ-ONLY HELPERS FOR THE UI ─────────────
+  // How the outbreak is doing inside one country: >1 growing, <1 dying out.
+  function reproductionFor(c) {
+    const alive = c.pop - c.dead;
+    if (alive <= 0) return 0;
+    const growth = betaFor(c) * (c.healthy / alive);
+    const loss   = deathRateFor(c);
+    return loss > 0 ? growth / loss : Infinity;
+  }
+
   function getStats() {
     return {
-      totalPop:      state.totalPop,
-      totalInfected: state.totalInfected,
-      totalDead:     state.totalDead,
-      totalHealthy:  state.totalHealthy,
-      cureProgress:  state.cureProgress,
-      day:           state.day,
-      dna:           state.dna,
-      dnaSpent:      state.dnaSpent,
-      countriesInfected: state.countriesInfected,
-      peakInfected:  state.peakInfected,
+      totalPop: state.totalPop, totalInfected: state.totalInfected,
+      totalDead: state.totalDead, totalHealthy: state.totalHealthy,
+      cureProgress: state.cureProgress, day: state.day,
+      dna: state.dna, dnaSpent: state.dnaSpent,
+      countriesInfected: state.countriesInfected, peakInfected: state.peakInfected,
     };
   }
 
   return {
-    init, startInCountry, setSpeed, setPaused,
+    init, startInCountry, setSpeed, setPaused, step, on,
     buyTrait, devolveTrait, findTrait, getAllTraits,
     awardDna, toast,
-    getState, getStats, getCountry, getAllCountries,
-    getHistory: () => _history,
+    getState: () => state, getStats,
+    getCountry: iso => state.countries[iso] || null,
+    getAllCountries: () => countryList,
+    getHistory: () => history,
+    getMods: () => mods,
+    betaFor, deathRateFor, reproductionFor,
     getBubbles, collectBubble,
     saveGame, loadSave, hasSave, clearSave, getSaveMeta,
   };

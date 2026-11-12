@@ -35,8 +35,8 @@
       <h1 class="game-title">PATHOGEN</h1>
       <p class="game-subtitle">GLOBAL PANDEMIC SIMULATOR</p>
       <div class="splash-pills">
-        <div class="stat-pill">8.1B lives at stake</div>
-        <div class="stat-pill" id="pill-version">v2.0</div>
+        <div class="stat-pill">7.7B lives at stake</div>
+        <div class="stat-pill" id="pill-version">v3.0</div>
       </div>
       <button class="btn-primary pulse-btn" id="btn-start">☣ INITIATE OUTBREAK</button>
       <button class="btn-secondary btn-load-save hidden" id="btn-load-save">💾 CONTINUE SAVED GAME</button>
@@ -60,29 +60,29 @@
       <div class="howto-grid">
         <div class="howto-section">
           <h3>☣ OBJECTIVE</h3>
-          <p>Evolve your pathogen to infect and kill all 8 billion humans before a cure is developed. Stay hidden, spread globally, then strike.</p>
+          <p>Infect every country, then wipe out humanity before a cure is finished. You lose if the cure is deployed, or if your pathogen kills its last host while anyone is still uninfected.</p>
         </div>
         <div class="howto-section">
           <h3>⚡ DNA POINTS</h3>
-          <p>Earn DNA as your disease spreads. Spend it in EVOLVE to unlock new traits. Devolve traits for a 50% refund.</p>
+          <p>Earn DNA as the outbreak grows, reaches new countries, and from bubbles on the map. Spend it in EVOLVE. Devolving refunds half; random mutations are free and can be devolved.</p>
         </div>
         <div class="howto-section">
           <h3>🧬 EVOLUTION STRATEGY</h3>
-          <p><strong style="color:#ff8c00">1.</strong> Start with Transmissions to spread fast.<br>
-             <strong style="color:#ff8c00">2.</strong> Keep symptoms LOW until fully global.<br>
-             <strong style="color:#ff8c00">3.</strong> Then pile on lethality symptoms to kill.</p>
+          <p><strong style="color:#ff8c00">1.</strong> Transmissions decide <em>how</em> you travel: by plane, ship or over land.<br>
+             <strong style="color:#ff8c00">2.</strong> Keep symptoms low until you are everywhere.<br>
+             <strong style="color:#ff8c00">3.</strong> Then turn lethal. Too early and it burns itself out.</p>
         </div>
         <div class="howto-section">
-          <h3>🌡 CLIMATE MATTERS</h3>
-          <p>Cold resistance to reach Russia &amp; Canada. Heat resistance for the Middle East &amp; Africa. Without it, spread is severely limited.</p>
+          <h3>🌡 CLIMATE &amp; WEALTH</h3>
+          <p>Cold and arid countries resist you until you adapt. Poor countries spread fast; rich ones spread slowly, fund the cure, and close their airports first.</p>
         </div>
         <div class="howto-section">
-          <h3>🔬 CURE WARNING</h3>
-          <p>High severity triggers cure research. Rich countries fund it faster. Buy Drug Resistance and Genetic Hardening to slow it down.</p>
+          <h3>🔬 DETECTION &amp; CURE</h3>
+          <p>Visible symptoms and deaths fill the detection meter. Once identified, research begins and governments start closing routes. Dead and sick researchers cure nothing.</p>
         </div>
         <div class="howto-section">
           <h3>🗺 MAP</h3>
-          <p>Dark green = healthy • Yellow-orange = infected • Red = heavy • Dark grey = mass death. Tap countries for details.</p>
+          <p>Orange to red shows infection, near-black shows mass death. Tap a country to see whether the outbreak there is growing or burning out.</p>
         </div>
       </div>
       <button class="btn-primary" id="btn-close-howto">✓ UNDERSTOOD</button>
@@ -133,8 +133,8 @@
       <div class="settings-section">
         <div class="settings-section-title">ℹ ABOUT</div>
         <div class="settings-about">
-          <span class="settings-about-line">PATHOGEN v2.0 — Global Pandemic Simulator</span>
-          <span class="settings-about-line">Inspired by Plague Inc. &amp; Pandemic games</span>
+          <span class="settings-about-line">PATHOGEN v3.0 · Global Pandemic Simulator</span>
+          <span class="settings-about-line">A strategy game built on a stochastic epidemic model</span>
           <span class="settings-about-line" id="set-version-line">All simulation parameters are fictional.</span>
         </div>
       </div>
@@ -180,27 +180,27 @@
           <div class="type-card" data-type="virus">
             <span class="type-icon">🔴</span>
             <span class="type-name">VIRUS</span>
-            <span class="type-desc">Random mutations. Faster spread, harder to control.</span>
+            <span class="type-desc">Mutates new symptoms for free, wanted or not. Fast spread.</span>
           </div>
           <div class="type-card" data-type="fungus">
             <span class="type-icon">🍄</span>
             <span class="type-name">FUNGUS</span>
-            <span class="type-desc">Spore bursts reach new regions. Struggles with travel routes.</span>
+            <span class="type-desc">Slow, but spore bursts cross closed borders.</span>
           </div>
           <div class="type-card" data-type="parasite">
             <span class="type-icon">🐛</span>
             <span class="type-name">PARASITE</span>
-            <span class="type-desc">Stays hidden longer. Reduced cure research awareness.</span>
+            <span class="type-desc">Hard to detect and slow to cure. Earns less DNA.</span>
           </div>
           <div class="type-card" data-type="prion">
             <span class="type-icon">🧠</span>
             <span class="type-name">PRION</span>
-            <span class="type-desc">Nearly invisible. Extremely slow but hard to cure.</span>
+            <span class="type-desc">Nearly invisible and very hard to cure. Extremely slow.</span>
           </div>
           <div class="type-card" data-type="nano-virus">
             <span class="type-icon">⚙️</span>
-            <span class="type-name">NANO-VIRUS</span>
-            <span class="type-desc">Instant detection. Cure starts immediately. Very fast spread.</span>
+            <span class="type-name">SYNTHETIC</span>
+            <span class="type-desc">Lab-made. Detected on day one, but spreads very fast.</span>
           </div>
         </div>
       </div>
@@ -208,10 +208,10 @@
       <div class="form-group">
         <label>DIFFICULTY</label>
         <div class="difficulty-row">
-          <button class="diff-btn" data-diff="casual">CASUAL</button>
-          <button class="diff-btn selected" data-diff="normal">NORMAL</button>
-          <button class="diff-btn" data-diff="brutal">BRUTAL</button>
-          <button class="diff-btn" data-diff="mega-brutal">MEGA BRUTAL</button>
+          <button class="diff-btn" data-diff="mild">MILD</button>
+          <button class="diff-btn selected" data-diff="standard">STANDARD</button>
+          <button class="diff-btn" data-diff="severe">SEVERE</button>
+          <button class="diff-btn" data-diff="extinction">EXTINCTION</button>
         </div>
       </div>
 
@@ -245,7 +245,7 @@
         <span class="hud-icon">👤</span>
         <div class="hud-values">
           <span class="hud-label">HEALTHY</span>
-          <span class="hud-number" id="hud-healthy">8.1B</span>
+          <span class="hud-number" id="hud-healthy">7.71B</span>
         </div>
       </div>
       <div class="hud-stat cure-stat">
@@ -264,8 +264,11 @@
       <div class="cure-bar" id="cure-bar"></div>
       <div class="cure-label" id="cure-label"></div>
     </div>
-    <!-- STEALTH BADGE -->
-    <div class="stealth-badge hidden" id="stealth-badge" title="Disease undetected — cure research paused">🟢 STEALTH</div>
+    <!-- DETECTION METER -->
+    <div class="detect-meter" id="detect-meter" title="How close the world is to identifying your pathogen. Symptoms and deaths fill it.">
+      <span class="detect-label" id="detect-label">UNDETECTED 0%</span>
+      <div class="detect-track"><div class="detect-fill" id="detect-fill"></div></div>
+    </div>
 
     <!-- THREAT LEVEL METER -->
     <div class="threat-bar-container" id="threat-bar-container">
@@ -375,14 +378,16 @@
         <div class="cp-row"><span>Population</span><span id="cp-pop">0</span></div>
         <div class="cp-row"><span>Climate</span><span id="cp-climate">-</span></div>
         <div class="cp-row"><span>Wealth</span><span id="cp-wealth">-</span></div>
+        <div class="cp-row"><span>Outbreak</span><span id="cp-trend">-</span></div>
         <div class="cp-row"><span>Gov. Response</span><span id="cp-airports">-</span></div>
+        <div class="cp-row"><span>Routes</span><span id="cp-routes">-</span></div>
         <div class="cp-row"><span>Healthcare</span><span id="cp-healthcare">-</span></div>
       </div>
     </div>
 
     <!-- COUNTRIES INFECTED BADGE -->
     <div class="countries-badge" id="countries-badge">
-      <span class="live-dot"></span> 🌍 <span id="hud-countries">0</span> / <span id="hud-countries-total">55</span>
+      <span class="live-dot"></span> 🌍 <span id="hud-countries">0</span> / <span id="hud-countries-total">118</span>
     </div>
 
     <!-- DAY COUNTER -->
@@ -436,11 +441,8 @@
         </div>
         <span class="news-day-stamp" id="news-day">DAY 0</span>
       </div>
-      <div class="news-img-wrap">
-        <img id="news-img" src="" alt="Breaking News" loading="lazy" />
-        <div class="news-tag-overlay" id="news-tag">BREAKING</div>
-      </div>
       <div class="news-content-area">
+        <div class="news-tag-overlay" id="news-tag">BREAKING</div>
         <h2 class="news-headline" id="news-headline">Headline</h2>
         <p  class="news-body-text" id="news-body">Body.</p>
       </div>
@@ -544,18 +546,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <!-- Chart.js for epidemic curve -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=6"></script>
-  <script src="js/game.js?v=6"></script>
-  <script src="js/map.js?v=6"></script>
-  <script src="js/evolution.js?v=6"></script>
-  <script src="js/ui.js?v=6"></script>
-  <script src="js/events.js?v=6"></script>
-  <script src="js/audio.js?v=6"></script>
-  <script src="js/news-popup.js?v=6"></script>
-  <script src="js/main.js?v=6"></script>
+  <script src="js/data.js?v=8"></script>
+  <script src="js/game.js?v=8"></script>
+  <script src="js/map.js?v=8"></script>
+  <script src="js/evolution.js?v=8"></script>
+  <script src="js/ui.js?v=8"></script>
+  <script src="js/events.js?v=8"></script>
+  <script src="js/audio.js?v=8"></script>
+  <script src="js/news-popup.js?v=8"></script>
+  <script src="js/main.js?v=8"></script>
 </body>
 </html>

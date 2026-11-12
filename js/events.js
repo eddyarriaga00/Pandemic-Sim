@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - Events & News System
+   PATHOGEN v3 - News ticker & milestones
+   (World events themselves live in the engine: see WORLD_EVENTS in data.js)
    ═══════════════════════════════════════════════ */
 
 const Events = (() => {
   let newsTimer    = null;
-  let eventTimer   = null;
   let newsPool     = [];
   let newsIndex    = 0;
 
@@ -54,7 +54,7 @@ const Events = (() => {
       'Global infection count passes {number}',
       'Airlines implement passenger screening at {count} airports',
       'Schools close in multiple cities across {country}',
-      'Stock markets tumble on pandemic fears — Dow drops 8%',
+      'Stock markets tumble on pandemic fears',
       'WHO raises global alert level to highest tier',
       'Travel advisories issued for {country} and surrounding regions',
       '{country} announces emergency quarantine measures',
@@ -159,10 +159,10 @@ const Events = (() => {
     if (totalCountries > 0) {
       const infectedPct = gs.countriesInfected / totalCountries;
       const countryMilestones = [
-        { pct: 0.25, key: 25,  dna: 3,  msg: n => `🌐 ${n} now in 25% of the world's nations` },
-        { pct: 0.50, key: 50,  dna: 6,  msg: n => `🌐 ${n} detected in half the world — containment failing` },
-        { pct: 0.75, key: 75,  dna: 10, msg: n => `🌐 ${n} in 75% of nations — is anything left to stop it?` },
-        { pct: 1.00, key: 100, dna: 15, msg: n => `🌐 ${n} has reached EVERY NATION ON EARTH` },
+        { pct: 0.25, key: 25,  dna: 2,  msg: n => `🌐 ${n} now in 25% of the world's nations` },
+        { pct: 0.50, key: 50,  dna: 3,  msg: n => `🌐 ${n} detected in half the world — containment failing` },
+        { pct: 0.75, key: 75,  dna: 4, msg: n => `🌐 ${n} in 75% of nations — is anything left to stop it?` },
+        { pct: 1.00, key: 100, dna: 6, msg: n => `🌐 ${n} has reached EVERY NATION ON EARTH` },
       ];
       for (const m of countryMilestones) {
         if (!_milestones.countries.has(m.key) && infectedPct >= m.pct) {
@@ -191,234 +191,22 @@ const Events = (() => {
     }
   }
 
+  // After loading a save: mark everything already passed as seen, silently.
+  function syncMilestones(gs) {
+    resetMilestones();
+    for (const m of INF_MILESTONES)  if (gs.totalInfected >= m.val) _milestones.infected.add(m.val);
+    for (const m of DEAD_MILESTONES) if (gs.totalDead >= m.val)     _milestones.dead.add(m.val);
+    const share = gs.countriesInfected / Object.keys(gs.countries).length;
+    for (const k of [25, 50, 75, 100]) if (share >= k / 100) _milestones.countries.add(k);
+    for (const k of [25, 50, 75, 90])  if (gs.cureProgress >= k) _milestones.dna.add('c' + k);
+  }
+
   function resetMilestones() {
     _milestones.infected.clear();
     _milestones.dead.clear();
     _milestones.countries.clear();
     _milestones.dna.clear();
   }
-
-  // ─── RANDOM EVENTS ────────────────────────────
-  const WORLD_EVENTS = [
-    // Climate events
-    {
-      id:   'cold_snap',
-      msg:  '❄️ Cold snap across northern hemisphere — disease surges in cold climates!',
-      type: 'warn',
-      effect: { climateBoost: { cold: 0.55, tropical: -0.30 }, duration: 90 },
-      prob: 0.0008,
-    },
-    {
-      id:   'heat_wave',
-      msg:  '🌡 Extreme heat wave — disease thrives in arid zones, retreats from cold!',
-      type: 'warn',
-      effect: { climateBoost: { arid: 0.50, cold: -0.28 }, duration: 90 },
-      prob: 0.0008,
-    },
-    {
-      id:   'monsoon_season',
-      msg:  '🌧 Monsoon season boosts waterborne spread across tropical regions',
-      type: 'warn',
-      effect: { climateBoost: { tropical: 0.40 }, duration: 80 },
-      prob: 0.0007,
-    },
-    // Mutation events
-    {
-      id:   'mutation_burst',
-      msg:  '🧬 Spontaneous mutation detected — infectivity temporarily spiked!',
-      type: 'alert',
-      effect: { infectivityBoost: 0.06, duration: 55 },
-      prob: 0.002,
-      types: ['virus'],
-    },
-    {
-      id:   'antigenic_shift',
-      msg:  '🧬 Antigenic shift — immune systems worldwide have no prior defence',
-      type: 'alert',
-      effect: { infectivityBoost: 0.08, cureResist: 0.06, duration: 70 },
-      prob: 0.0008,
-      types: ['virus'],
-    },
-    {
-      id:   'genetic_drift',
-      msg:  '🧬 Spontaneous genetic drift — pathogen evolves favourable adaptation (+4 DNA)',
-      type: 'dna',
-      effect: { dnaBonus: 4, duration: 0 },
-      prob: 0.0012,
-    },
-    {
-      id:   'dna_windfall',
-      msg:  '⚡ Rapid viral replication detected — genetic windfall! (+6 DNA)',
-      type: 'dna',
-      effect: { dnaBonus: 6, duration: 0 },
-      prob: 0.0007,
-    },
-    {
-      id:   'host_adaptation',
-      msg:  '⚡ Pathogen adapts more efficiently to human hosts (+5 DNA)',
-      type: 'dna',
-      effect: { dnaBonus: 5, duration: 0 },
-      prob: 0.0009,
-    },
-    // Government/social events
-    {
-      id:   'flight_ban',
-      msg:  '✈️ International flight bans imposed — travel reduced globally',
-      type: 'warn',
-      effect: { travelMult: 0.6, duration: 120 },
-      prob: 0.0015,
-    },
-    {
-      id:   'mass_protest',
-      msg:  '👥 Mass protests against lockdowns increase transmission!',
-      type: 'alert',
-      effect: { infectivityBoost: 0.05, duration: 50 },
-      prob: 0.002,
-    },
-    {
-      id:   'media_panic',
-      msg:  '📺 24/7 media coverage triggers mass hysteria and social breakdown',
-      type: 'alert',
-      effect: { infectivityBoost: 0.04, duration: 40 },
-      prob: 0.002,
-    },
-    {
-      id:   'political_paralysis',
-      msg:  '🏛️ Political gridlock delays global response — cure research stalls',
-      type: 'warn',
-      effect: { cureResist: 0.09, duration: 60 },
-      prob: 0.0012,
-    },
-    {
-      id:   'failed_quarantine',
-      msg:  '😷 Quarantine zones breached — containment measures collapse in multiple cities',
-      type: 'alert',
-      effect: { infectivityBoost: 0.07, travelMult: 1.3, duration: 45 },
-      prob: 0.001,
-    },
-    {
-      id:   'refugee_crisis',
-      msg:  '🚶 Mass refugee movements spread pathogen to new regions',
-      type: 'alert',
-      effect: { travelMult: 1.35, duration: 60 },
-      prob: 0.001,
-    },
-    {
-      id:   'overcrowded_camps',
-      msg:  '🏕 Overcrowded refugee camps become disease hotspots — spread accelerates',
-      type: 'alert',
-      effect: { infectivityBoost: 0.06, duration: 50 },
-      prob: 0.001,
-    },
-    // Research/medical events
-    {
-      id:   'who_summit',
-      msg:  '🌐 Emergency WHO summit coordinates global response — cure speeds up',
-      type: 'cure',
-      effect: { cureBoost: 15, duration: 0 },
-      prob: 0.0008,
-    },
-    {
-      id:   'vaccine_trial_fail',
-      msg:  '💉 Promising vaccine candidate fails phase 3 trials — setback for science',
-      type: 'warn',
-      effect: { cureResist: 0.08, duration: 50 },
-      prob: 0.001,
-    },
-    {
-      id:   'antibiotic_fail',
-      msg:  '💊 Standard treatments found completely ineffective — cure slows',
-      type: 'alert',
-      effect: { cureResist: 0.12, duration: 80 },
-      prob: 0.001,
-    },
-    {
-      id:   'black_market_cure',
-      msg:  '🧪 Underground labs synthesise partial cure — small boost to research',
-      type: 'cure',
-      effect: { cureBoost: 8, duration: 0 },
-      prob: 0.0006,
-    },
-    {
-      id:   'anti_vax_movement',
-      msg:  '📢 Anti-vaccine movement surges — public trust in medicine collapses',
-      type: 'warn',
-      effect: { cureResist: 0.10, duration: 70 },
-      prob: 0.001,
-    },
-    {
-      id:   'international_cooperation',
-      msg:  '🤝 Unprecedented global cooperation — cure research significantly accelerated',
-      type: 'cure',
-      effect: { cureBoost: 12, duration: 0 },
-      prob: 0.0007,
-    },
-    {
-      id:   'lab_explosion',
-      msg:  '💥 Biosafety lab explosion destroys cure samples — research set back weeks',
-      type: 'alert',
-      effect: { cureResist: 0.14, duration: 90 },
-      prob: 0.0006,
-    },
-    // Infrastructure events
-    {
-      id:   'hospital_collapse',
-      msg:  '🏥 Hospital systems overwhelmed — mortality surges in infected zones',
-      type: 'alert',
-      effect: { lethalityBoost: 0.0004, duration: 70 },
-      prob: 0.0012,
-    },
-    {
-      id:   'sewer_contamination',
-      msg:  '🚰 Water infrastructure failures — sewage contamination boosts waterborne spread',
-      type: 'alert',
-      effect: { infectivityBoost: 0.04, duration: 80 },
-      prob: 0.0009,
-    },
-    {
-      id:   'natural_disaster',
-      msg:  '🌊 Major natural disaster displaces millions — disease vectors spread rapidly',
-      type: 'alert',
-      effect: { infectivityBoost: 0.05, travelMult: 1.2, duration: 60 },
-      prob: 0.0007,
-    },
-    {
-      id:   'supply_chain_collapse',
-      msg:  '📦 Global supply chain collapse — hospitals run out of critical supplies',
-      type: 'alert',
-      effect: { lethalityBoost: 0.0003, duration: 60 },
-      prob: 0.0008,
-    },
-    // Special late-game events
-    {
-      id:   'military_quarantine',
-      msg:  '🪖 Military quarantine zones established — travel between regions halted',
-      type: 'warn',
-      effect: { travelMult: 0.5, duration: 100 },
-      prob: 0.0007,
-    },
-    {
-      id:   'religious_gatherings',
-      msg:  '⛪ Massive religious gatherings accelerate spread across continents',
-      type: 'alert',
-      effect: { infectivityBoost: 0.06, travelMult: 1.4, duration: 40 },
-      prob: 0.0008,
-    },
-    {
-      id:   'social_media_disinfo',
-      msg:  '📱 Disinformation campaigns convince millions the disease is a hoax',
-      type: 'alert',
-      effect: { infectivityBoost: 0.05, duration: 55 },
-      prob: 0.001,
-    },
-    {
-      id:   'economic_collapse',
-      msg:  '📉 Economic collapse causes healthcare funding cuts in 40+ nations',
-      type: 'alert',
-      effect: { lethalityBoost: 0.0003, cureResist: 0.05, duration: 80 },
-      prob: 0.0007,
-    },
-  ];
 
   // ─── START TICKER ─────────────────────────────
   function startNewsTicker() {
@@ -432,10 +220,7 @@ const Events = (() => {
       const item = newsPool[newsIndex % newsPool.length];
       newsIndex++;
       UI.setNewsText(item);
-    }, 3500); // 3.5s feels alive vs old 7s
-
-    if (eventTimer) clearInterval(eventTimer);
-    eventTimer = setInterval(checkWorldEvents, 4000);
+    }, 3500);
   }
 
   function buildPool() {
@@ -452,12 +237,16 @@ const Events = (() => {
       .replace(/{number}/g,  UI.fmt(gs.totalInfected + gs.totalDead))
       .replace(/{pct}/g,     gs.cureProgress.toFixed(0));
 
-    // Stack categories by relevance — more serious states get more news weight
-    if (gs.totalDead > 10000)     TEMPLATES.lethality.forEach(t => newsPool.push(fill(t)));
-    if (gs.cureProgress > 0)      TEMPLATES.cure.forEach(t => newsPool.push(fill(t)));
-    if (countries.length > 0)     TEMPLATES.spreading.forEach(t => newsPool.push(fill(t)));
-    if (countries.length < 5)     TEMPLATES.early.forEach(t => newsPool.push(fill(t)));
-    TEMPLATES.events.forEach(t => newsPool.push(fill(t)));
+    // Until the disease is identified the world has no idea anything is
+    // wrong, so the ticker only carries vague local reports.
+    if (!gs.cureActive) {
+      TEMPLATES.early.forEach(t => newsPool.push(fill(t)));
+    } else {
+      if (gs.totalDead > 10000) TEMPLATES.lethality.forEach(t => newsPool.push(fill(t)));
+      if (gs.cureProgress > 0)  TEMPLATES.cure.forEach(t => newsPool.push(fill(t)));
+      TEMPLATES.spreading.forEach(t => newsPool.push(fill(t)));
+      TEMPLATES.events.forEach(t => newsPool.push(fill(t)));
+    }
     // Shuffle to avoid repetitive ordering
     for (let i = newsPool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -467,9 +256,9 @@ const Events = (() => {
 
   // ─── TRIGGER NEWS ─────────────────────────────
   function triggerNews(category) {
-    const templates = TEMPLATES[category];
-    if (!templates) return;
     const gs = Game.getState();
+    const templates = TEMPLATES[gs.cureActive ? category : 'early'];
+    if (!templates) return;
     const countries = Object.values(gs.countries).filter(c => c.reached);
     const rc = () => countries.length ? countries[Math.floor(Math.random() * countries.length)].name : 'an unknown region';
     const t = templates[Math.floor(Math.random() * templates.length)];
@@ -479,48 +268,6 @@ const Events = (() => {
        .replace(/{number}/g,  UI.fmt(gs.totalInfected + gs.totalDead))
        .replace(/{pct}/g,     gs.cureProgress.toFixed(0))
     );
-  }
-
-  // ─── WORLD EVENTS ─────────────────────────────
-  function checkWorldEvents() {
-    const gs = Game.getState();
-    if (gs.phase !== 'spreading') return;
-
-    // Throttle: no more than 1 event per check (prevents event spam)
-    const candidates = WORLD_EVENTS.filter(ev => {
-      if (ev.types && !ev.types.includes(gs.diseaseType)) return false;
-      // Don't re-trigger active events of the same id
-      if (gs.activeEvents.some(a => a.id === ev.id)) return false;
-      return Math.random() < ev.prob * gs.speed;
-    });
-    if (candidates.length > 0) {
-      // Pick one at random to avoid simultaneous triggers
-      triggerWorldEvent(candidates[Math.floor(Math.random() * candidates.length)]);
-    }
-  }
-
-  function triggerWorldEvent(ev) {
-    const gs = Game.getState();
-    UI.toast(ev.msg, ev.type);
-    triggerNews('events');
-
-    if (!ev.effect) return;
-
-    if (ev.effect.cureBoost) {
-      gs.cureProgress = Math.min(100, gs.cureProgress + ev.effect.cureBoost);
-      return;
-    }
-
-    if (ev.effect.dnaBonus) {
-      Game.awardDna(ev.effect.dnaBonus);
-      return;
-    }
-
-    gs.activeEvents.push({
-      id:        ev.id,
-      effect:    ev.effect,
-      remaining: ev.effect.duration,
-    });
   }
 
   // ─── MONTHLY EVENTS ───────────────────────────
@@ -547,11 +294,10 @@ const Events = (() => {
   // ─── CLEANUP ──────────────────────────────────
   function cleanup() {
     if (newsTimer)  { clearInterval(newsTimer);  newsTimer  = null; }
-    if (eventTimer) { clearInterval(eventTimer); eventTimer = null; }
     newsPool  = [];
     newsIndex = 0;
     resetMilestones();
   }
 
-  return { startNewsTicker, triggerNews, onMonthTick, onTick, cleanup };
+  return { startNewsTicker, triggerNews, onMonthTick, onTick, syncMilestones, cleanup };
 })();

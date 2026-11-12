@@ -1,10 +1,30 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - Evolution Tree UI
+   PATHOGEN v3 - Evolution Tree UI
    ═══════════════════════════════════════════════ */
 
 const Evolution = (() => {
   let activeTab = 'transmissions';
   let initialized = false;
+
+  // Short labels for what a trait does beyond the four stat bars.
+  const plus = (v, what) => `+${Math.round(v * 100)}% ${what}`;
+  const MOD_LABELS = {
+    air:      v => plus(v, 'by plane'),
+    sea:      v => plus(v, 'by ship'),
+    land:     v => plus(v, 'over land'),
+    tropical: v => plus(v, 'in tropics'),
+    poor:     v => plus(v, 'in poor nations'),
+    rich:     v => plus(v, 'in rich nations'),
+    urban:    v => plus(v, 'in huge nations'),
+    rural:    v => plus(v, 'in small nations'),
+    stealth:  v => plus(v, 'harder to detect'),
+    dnaRate:  v => plus(v, 'DNA income'),
+    leak:     () => 'slips past closures',
+    lockdownResist: () => 'weakens lockdowns',
+    cold:     () => 'cold climates',
+    heat:     () => 'hot climates',
+    extremophile: () => 'all climates',
+  };
 
   function init() {
     if (initialized) return;
@@ -33,11 +53,13 @@ const Evolution = (() => {
     document.getElementById('evo-disease-name').textContent = gs.diseaseName;
     refreshTree();
     document.getElementById('modal-evolution').classList.remove('hidden');
+    document.body.classList.add('evo-open');
     if (typeof AudioEngine !== 'undefined') AudioEngine.sfxEvoOpen();
   }
 
   function close() {
     document.getElementById('modal-evolution').classList.add('hidden');
+    document.body.classList.remove('evo-open');
   }
 
   function refreshTree() {
@@ -78,6 +100,11 @@ const Evolution = (() => {
       if (e.severity    != null && e.severity    !== 0) effArr.push(fmtEff(e.severity,    'sev'));
       if (e.lethality   != null && e.lethality   !== 0) effArr.push(fmtEff(e.lethality,   'leth'));
       if (e.cureResist  != null && e.cureResist  !== 0) effArr.push(fmtEff(e.cureResist,  'resist'));
+      for (const k in (trait.mods || {})) {
+        const label = MOD_LABELS[k];
+        if (label) effArr.push(typeof label === 'function' ? label(trait.mods[k]) : label);
+      }
+      const free = gs.freeTraits.has(trait.id);
 
       card.innerHTML = `
         <span class="trait-icon">${trait.icon}</span>
@@ -86,8 +113,8 @@ const Evolution = (() => {
         ${effArr.length ? `<div class="trait-effects">${effArr.join(' · ')}</div>` : ''}
         <div class="trait-footer">
           ${owned
-            ? `<span class="trait-owned-badge">✓ EVOLVED</span>
-               <button class="trait-devolve-btn" data-id="${trait.id}">↩ DEVOLVE</button>`
+            ? `<span class="trait-owned-badge">${free ? '🧬 MUTATED' : '✓ EVOLVED'}</span>
+               <button class="trait-devolve-btn" data-id="${trait.id}">↩ DEVOLVE${free ? '' : ` +${Math.max(1, Math.floor(trait.cost * 0.5))}`}</button>`
             : locked
               ? `<span class="trait-cost locked-cost">🔒 Req: ${trait.requires.map(r => Game.findTrait(r)?.name || r).join(' + ')}</span>`
               : `<span class="trait-cost ${afford ? '' : 'cant-afford'}">⚡ ${trait.cost} DNA</span>`
@@ -111,24 +138,17 @@ const Evolution = (() => {
     });
   }
 
+  // The engine announces trait changes, which re-renders the tree.
   function purchase(traitId) {
     const result = Game.buyTrait(traitId);
-    if (!result.ok) {
-      showFlash(result.msg === 'Not enough DNA' ? `⚡ Not enough DNA!` : result.msg, 'red');
-    } else {
-      if (typeof AudioEngine !== 'undefined') AudioEngine.sfxTraitPurchase();
-    }
-    refreshTree();
+    if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? '⚡ Not enough DNA!' : result.msg, 'red');
+    else AudioEngine.sfxTraitPurchase();
   }
 
   function devolve(traitId) {
     const result = Game.devolveTrait(traitId);
-    if (!result.ok) {
-      showFlash(`Cannot devolve: ${result.msg}`, 'red');
-    } else {
-      if (typeof AudioEngine !== 'undefined') AudioEngine.sfxTraitDevolve();
-    }
-    refreshTree();
+    if (!result.ok) showFlash(`Cannot devolve: ${result.msg}`, 'red');
+    else AudioEngine.sfxTraitDevolve();
   }
 
   function showFlash(msg, color) {

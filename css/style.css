@@ -439,27 +439,37 @@ html, body {
 .cure-stat     .hud-rate { color: rgba(88,166,255,0.55); }
 
 /* Stealth mode badge */
-.stealth-badge {
-  position: fixed;
-  right: 10px;
-  top: 58px;   /* just below the HUD top bar */
+.detect-meter {
+  position: absolute;
+  left: 10px;
+  top: 96px;   /* under the countries badge */
   z-index: 35;
+  width: 132px;
   background: rgba(13,17,23,0.88);
   border: 1px solid rgba(63,185,80,0.45);
   color: var(--green);
+  padding: 5px 8px 6px;
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.4s, color 0.4s;
+}
+.detect-label {
+  display: block;
   font-size: 0.52rem;
   font-weight: 700;
   letter-spacing: 0.12em;
-  padding: 3px 9px;
-  border-radius: 4px;
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-  animation: stealthPulse 2.8s ease-in-out infinite;
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+  white-space: nowrap;
 }
-@keyframes stealthPulse {
-  0%,100% { opacity: 0.65; box-shadow: none; }
-  50%      { opacity: 1;    box-shadow: 0 0 10px rgba(63,185,80,0.3); }
+.detect-track { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.detect-fill  {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+  transition: width 0.6s ease;
 }
+.detect-meter.detected { border-color: rgba(248,81,73,0.5); color: var(--red); }
+.detect-meter.detected .detect-fill { background: var(--red); }
 
 /* Cure progress bar */
 .cure-bar-container {
@@ -1331,7 +1341,7 @@ html, body {
   /* Overlays */
   .countries-badge { font-size: 0.56rem; padding: 3px 7px; }
   .day-counter     { font-size: 0.56rem; padding: 3px 8px; }
-  .stealth-badge   { font-size: 0.46rem; padding: 2px 6px; top: 54px; }
+  .detect-meter    { width: 112px; top: 90px; padding: 4px 6px 5px; }
 
   /* Toast */
   #toast-container { max-width: 80vw; top: 58px; right: 8px; }
@@ -1545,7 +1555,7 @@ html, body {
   filter: brightness(0.7) saturate(0.6);
 }
 .news-tag-overlay {
-  position: absolute; top: 12px; left: 0;
+  align-self: flex-start;
   background: var(--red-dim);
   color: #fff; font-size: 0.6rem; font-weight: 800;
   letter-spacing: 0.14em; padding: 4px 14px;
@@ -1837,7 +1847,7 @@ html, body {
 .top-countries-panel {
   position: absolute;
   left: 10px;
-  bottom: 60px;   /* above news bar */
+  bottom: 112px;  /* above the bottom HUD and news bar */
   z-index: 35;
   background: rgba(8,11,16,0.88);
   border: 1px solid var(--bdr);
@@ -2079,3 +2089,7 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+
+/* Toasts and news cards would sit on top of the evolution screen's controls */
+body.evo-open #toast-container,
+body.evo-open .news-card { display: none; }

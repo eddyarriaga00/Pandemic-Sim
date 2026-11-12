@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   PATHOGEN v2 - Main Entry Point
+   PATHOGEN v3 - Main Entry Point
    Screen flow, wiring, game bootstrap
    ═══════════════════════════════════════════════ */
 
@@ -24,7 +24,7 @@
       document.getElementById('pm-disease-name').textContent = gs.diseaseName || 'PATHOGEN';
       const typeLabels = {
         bacteria: 'BACTERIAL STRAIN', virus: 'VIRAL STRAIN', fungus: 'FUNGAL STRAIN',
-        parasite: 'PARASITIC STRAIN', prion: 'PRION STRAIN', 'nano-virus': 'SYNTHETIC NANO-VIRUS',
+        parasite: 'PARASITIC STRAIN', prion: 'PRION STRAIN', 'nano-virus': 'SYNTHETIC STRAIN',
       };
       document.getElementById('pm-disease-type').textContent = typeLabels[gs.diseaseType] || '';
       document.getElementById('pm-day').textContent      = gs.day;
@@ -78,9 +78,9 @@
 
       document.getElementById('pm-main-menu')?.addEventListener('click', () => {
         hide();
+        Game.saveGame();
         Events.cleanup();
         UI.stopRenderLoop();
-        mapLoaded = false;
         UI.showScreen('screen-splash');
         refreshSaveButton();
       });
@@ -127,7 +127,7 @@
   })();
 
   let selectedType       = 'bacteria';
-  let selectedDifficulty = 'normal';
+  let selectedDifficulty = 'standard';
   let mapLoaded          = false;
   let originOverlay      = null;
   let confirmEl          = null;
@@ -148,39 +148,19 @@
   refreshSaveButton();
 
   document.getElementById('btn-load-save')?.addEventListener('click', async () => {
-    if (!Game.hasSave()) return;
+    if (!Game.loadSave()) { Game.clearSave(); refreshSaveButton(); return; }
     AudioEngine.init();
     AudioEngine.startMusic();
     _syncMusicBtn();
-    if (!Game.loadSave()) return;
-    UI.showScreen('screen-game');
     const gs = Game.getState();
-    document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.remove('active'));
-    const sp1 = document.getElementById('btn-speed1');
-    if (sp1) sp1.classList.add('active');
-    const pauseBtn = document.getElementById('btn-pause');
-    if (pauseBtn) { pauseBtn.textContent = '⏸'; pauseBtn.classList.remove('active'); }
-    const totalEl = document.getElementById('hud-countries-total');
-    if (totalEl) totalEl.textContent = Object.keys(gs.countries).length;
-    UI.initSpeedButtons();
-    Evolution.init();
-    UI.startRenderLoop();
-    if (!mapLoaded) {
-      await Map.load();
-      mapLoaded = true;
-    } else {
-      Map.updateColors();
-      Map.resetZoom();
-    }
-    if (gs.originIso) Map.setOrigin(gs.originIso);
-    NewsPopup.reset();
+    await enterGameScreen();
+    if (gs.originIso) WorldMap.setOrigin(gs.originIso);
+    Events.syncMilestones(gs);
+    NewsPopup.reset(gs.day);
     Events.startNewsTicker();
-    startDayWatcher();
+    setSpeedButton(gs.speed);
     Game.setPaused(false);
-    Game.setSpeed(gs.speed || 1);
-    const speedBtn = document.getElementById('btn-speed' + (gs.speed || 1));
-    if (speedBtn) { document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.remove('active')); speedBtn.classList.add('active'); }
-    toast(`💾 Loaded: ${gs.diseaseName} — Day ${gs.day}`, 'info');
+    UI.toast(`💾 Loaded: ${gs.diseaseName}, day ${gs.day}`, 'info');
   });
 
   document.getElementById('btn-start').addEventListener('click', () => {
@@ -212,7 +192,7 @@ Your objective: demonstrate the fragility of
 humanity's immune systems against an evolved
 biological threat. Infect. Evolve. Observe.
 
-The world holds 8.1 billion souls. None of them
+The world holds nearly eight billion souls. None of them
 know what is about to begin. They take planes,
 shake hands, breathe shared air — blissfully
 unaware that somewhere, something new has woken.
@@ -390,8 +370,9 @@ The rest is biology.
 
   document.getElementById('btn-main-menu').addEventListener('click', () => {
     Events.cleanup();
-    mapLoaded = false;
+    UI.stopRenderLoop();
     UI.showScreen('screen-splash');
+    refreshSaveButton();
   });
 
   // ─── DISEASE BRIEFINGS ───────────────────────
@@ -455,10 +436,10 @@ Disadvantage: transmission is the slowest of all strains. Every host must count.
     },
     'nano-virus': {
       icon: '⚙️',
-      codename: 'SYNTHETIC NANO-VIRUS · BIOHAZARD LEVEL 5',
+      codename: 'SYNTHETIC STRAIN · BIOHAZARD LEVEL 5',
       text: `This is not natural. This is manufactured. A self-replicating synthetic pathogen from a covert laboratory program that officially does not exist. You are the only person alive who knows what has been released.
 
-Detection is instantaneous — governments begin cure research from Day 1. This is a race. You must spread faster than their response systems can coordinate.
+Detection is instantaneous: governments begin cure research from day one. This is a race. You must spread faster than their response systems can coordinate.
 
 Advantage: highest raw transmission rate of any known pathogen. In optimal conditions it spreads faster than any containment measure can respond.
 
@@ -514,51 +495,46 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     });
   }
 
+  // ─── ENTER GAME SCREEN ────────────────────────
+  // Shared by new games and loaded saves.
+  function setSpeedButton(speed) {
+    document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-speed' + (speed || 1))?.classList.add('active');
+    const pauseBtn = document.getElementById('btn-pause');
+    if (pauseBtn) { pauseBtn.textContent = '⏸'; pauseBtn.classList.remove('active'); }
+  }
+
+  async function enterGameScreen() {
+    // Show the screen first so the map container has a size to measure
+    UI.showScreen('screen-game');
+    setSpeedButton(1);
+    const totalEl = document.getElementById('hud-countries-total');
+    if (totalEl) totalEl.textContent = Game.getAllCountries().length;
+    UI.initSpeedButtons();
+    Evolution.init();
+    Evolution.refreshTree();
+    UI.resetHud();
+    UI.startRenderLoop();
+    if (!mapLoaded) {
+      await WorldMap.load();
+      mapLoaded = true;
+    } else {
+      WorldMap.reset();
+    }
+    WorldMap.updateColors();
+  }
+
   // ─── INIT NEW GAME ────────────────────────────
   async function startNewGame(name, type, difficulty) {
-    // Tear down previous game
     Events.cleanup();
     UI.stopRenderLoop();
     NewsPopup.reset();
-    if (_dayWatcher) { clearInterval(_dayWatcher); _dayWatcher = null; }
     removeOverlays();
+    document.getElementById('briefing-overlay')?.remove();
 
-    // Remove any leftover briefing overlay
-    const old = document.getElementById('briefing-overlay');
-    if (old) old.remove();
-
-    // Init game logic
     Game.init({ name, type, difficulty });
+    await enterGameScreen();
 
-    // Show game screen FIRST so map container has size
-    UI.showScreen('screen-game');
-
-    // Reset speed buttons
-    document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.remove('active'));
-    const sp1 = document.getElementById('btn-speed1');
-    if (sp1) sp1.classList.add('active');
-    const pauseBtn = document.getElementById('btn-pause');
-    if (pauseBtn) { pauseBtn.textContent = '⏸'; pauseBtn.classList.remove('active'); }
-
-    // Update countries total
-    const totalEl = document.getElementById('hud-countries-total');
-    if (totalEl) totalEl.textContent = Object.keys(Game.getState().countries).length;
-
-    // Wire buttons (safe to call multiple times)
-    UI.initSpeedButtons();
-    Evolution.init();
-    UI.startRenderLoop();
-
-    // Load map (first time only)
-    if (!mapLoaded) {
-      await Map.load();
-      mapLoaded = true;
-    } else {
-      Map.updateColors();
-      Map.resetZoom();
-    }
-
-    // Show disease-specific briefing, then origin picker
     await showDiseaseBriefing(type);
     showOriginOverlay();
   }
@@ -588,7 +564,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       UI.showScreen('screen-setup');
     });
 
-    if (typeof Map !== 'undefined' && Map.setPick) Map.setPick(true);
+    if (WorldMap.setPick) WorldMap.setPick(true);
   }
 
   // Map country tap callback (registered as window hook for map.js)
@@ -611,7 +587,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     `;
     document.getElementById('screen-game').appendChild(confirmEl);
 
-    Map.highlightCountry(iso);
+    WorldMap.highlightCountry(iso);
 
     document.getElementById('cc-yes').addEventListener('click', () => {
       removeOverlays();
@@ -623,26 +599,74 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   };
 
   function beginInfection(iso) {
-    if (typeof Map !== 'undefined' && Map.setPick) Map.setPick(false);
+    if (WorldMap.setPick) WorldMap.setPick(false);
     Game.startInCountry(iso);
-    Map.zoomToCountry(iso);
-    Map.setOrigin(iso);
-    setTimeout(() => Map.pulseCountry(iso), 500);
+    WorldMap.zoomToCountry(iso);
+    WorldMap.setOrigin(iso);
+    setTimeout(() => WorldMap.pulseCountry(iso), 500);
     Events.startNewsTicker();
     NewsPopup.reset();
-    startDayWatcher();
   }
 
-  let _dayWatcher = null;
-  function startDayWatcher() {
-    if (_dayWatcher) clearInterval(_dayWatcher);
-    _dayWatcher = setInterval(() => {
-      const gs = Game.getState();
-      if (gs.phase !== 'spreading') return;
-      NewsPopup.check(gs.day);
-      // Events.onTick is now called directly from Game.tick() every game tick
-    }, 3000);
-  }
+  // ─── ENGINE EVENTS ────────────────────────────
+  // The simulation knows nothing about the page; everything it does that
+  // the player should see or hear arrives here.
+  const GOV_NEWS = {
+    airports: c => `${c.name} grounds all international flights`,
+    ports:    c => `${c.name} closes its sea ports to foreign vessels`,
+    borders:  c => `${c.name} shuts its land borders`,
+    lockdown: c => `${c.name} orders a national lockdown`,
+    sealed:   c => `${c.name} seals itself off from the outside world`,
+    collapse: c => `Reports of total government collapse in ${c.name}`,
+  };
+
+  Game.on((type, d) => {
+    const gs = Game.getState();
+    switch (type) {
+      case 'toast':
+        UI.toast(d.msg, d.type);
+        break;
+      case 'dna':
+        UI.showDnaPopup(d.amount);
+        UI.updateDnaDisplay();
+        UI.checkEvoAvailable();
+        if (d.amount >= 2) AudioEngine.sfxDNA();
+        break;
+      case 'country':
+        AudioEngine.sfxNewCountry();
+        WorldMap.pulseCountry(d.iso);
+        if (d.srcIso != null) WorldMap.showTravelRoute(d.srcIso, d.iso, d.method);
+        break;
+      case 'news':
+        Events.triggerNews(d.category);
+        break;
+      case 'gov': {
+        const c = Game.getCountry(d.iso);
+        if (c && GOV_NEWS[d.kind]) UI.setNewsText(GOV_NEWS[d.kind](c));
+        WorldMap.updateGovIcons();
+        break;
+      }
+      case 'traits':
+        UI.updateDnaDisplay();
+        UI.checkEvoAvailable();
+        Evolution.refreshTree();
+        break;
+      case 'step':
+        WorldMap.updateColors(d.dirty);
+        break;
+      case 'day':
+        Events.onTick(gs);
+        if (d.day % 30 === 0) Events.onMonthTick();
+        NewsPopup.check(d.day);
+        break;
+      case 'end':
+        d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
+        Events.cleanup();
+        NewsPopup.reset();
+        setTimeout(() => UI.showGameOver(d.won, gs, d.reason), 1200);
+        break;
+    }
+  });
 
 
   // ─── CLEANUP HELPERS ──────────────────────────
@@ -678,13 +702,14 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   }, { passive: false });
 
   // ─── ORIENTATION ──────────────────────────────
-  window.addEventListener('orientationchange', () => setTimeout(() => Map.resize(), 300));
+  window.addEventListener('orientationchange', () => setTimeout(() => WorldMap.resize(), 300));
 
   // ─── TAB VISIBILITY ───────────────────────────
   document.addEventListener('visibilitychange', () => {
     const gs = Game.getState();
     if (document.hidden && gs.phase === 'spreading' && !gs.paused) {
       Game.setPaused(true);
+      Game.saveGame();
       const pb = document.getElementById('btn-pause');
       if (pb) { pb.textContent = '▶'; pb.classList.add('active'); }
     }
@@ -777,8 +802,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     document.getElementById('btn-start').addEventListener('click', () => {
       cancelAnimationFrame(splashRaf);
     }, { once: true });
-    document.getElementById('btn-how-to-play').addEventListener('click', () => {});
   })();
 
-  console.log('%c☣ PATHOGEN v2 READY ☣', 'color:#00ff41;font-size:18px;font-weight:900;text-shadow:0 0 10px #00ff41');
+  console.log('%c☣ PATHOGEN v3 READY ☣', 'color:#00ff41;font-size:18px;font-weight:900;text-shadow:0 0 10px #00ff41');
 })();

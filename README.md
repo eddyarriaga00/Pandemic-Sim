@@ -8,7 +8,7 @@
 [![GitHub Pages](https://img.shields.io/badge/Deployed-GitHub%20Pages-24292e?style=flat-square&logo=github)](https://pages.github.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-A browser-based pandemic simulation game built entirely in vanilla JavaScript. No frameworks, no build step — just open `index.html` and play. Inspired by Plague Inc., rebuilt from scratch as a portfolio project.
+A browser-based pandemic strategy game in vanilla JavaScript. No frameworks, no build step: serve the folder and play.
 
 **[🎮 Play Now →](https://eddyarriaga00.github.io/Pandemic-Sim/)**
 
@@ -16,111 +16,106 @@ A browser-based pandemic simulation game built entirely in vanilla JavaScript. N
 
 ## What It Is
 
-You design and release a pathogen. You evolve it — choosing transmission routes, symptoms, and abilities — trying to infect and kill all 8.1 billion humans before scientists develop a cure. The world pushes back: airports close, governments mobilise, research accelerates.
+You release a pathogen and evolve it, choosing how it travels, what it does to its hosts and how it resists treatment. The goal is to infect all 118 countries and wipe out 7.7 billion people before a cure is finished. The world pushes back: doctors notice, airports and ports close, borders shut, research accelerates.
 
-The game uses a real **SIR epidemic model** under the hood, so spread actually behaves like epidemiology. Climate, wealth, travel routes, and healthcare quality all factor in.
+There are two ways to lose. The cure can be completed and deployed, or your pathogen can kill its last host while people are still uninfected.
+
+---
+
+## How the simulation works
+
+The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It publishes events and the page reacts, which also means it runs headless under Node.
+
+- **Epidemic model.** Each country tracks susceptible, infected, dead and (after the cure) immune people. New cases per step are `β · I · S / alive`; deaths are `μ · I`. Small counts are drawn from a Poisson distribution, so a handful of cases can stall or die out rather than growing on rails. If `μ` outruns `β` in a country the outbreak there burns out and leaves survivors.
+- **Seeded randomness.** One seeded generator drives everything and is stored in the save, so a game is reproducible.
+- **Detection.** Visible illness and deaths in countries with working healthcare fill a detection meter. Mild pathogens get a long head start; cure research only begins once the disease is identified.
+- **Cure.** Research is funded by countries in proportion to wealth, healthcare and how much of their workforce is still on its feet. A disease nobody is dying from gets little priority; a lethal one gets wartime funding until the researchers themselves start dying.
+- **Government response.** Each country closes airports, then ports, then land borders, then locks down as its visible caseload climbs. Untouched countries may seal themselves off once the world panics. A country that loses half its population collapses and stops enforcing anything.
+- **Routes.** Transmission traits are not just bigger numbers: airborne traits travel by plane, waterborne by ship, livestock and saliva over land borders, insects in the tropics, and so on. Closed routes still leak a little, more with the right traits.
 
 ---
 
 ## Features
 
-- **🗺 Interactive World Map** — D3.js + TopoJSON rendering of 55 countries with real geographic data. Pan, zoom, click countries for stats.
-- **🧬 34 Evolution Traits** — Transmissions, symptoms, and abilities across a real dependency tree. Spend DNA, devolve for refunds.
-- **⚡ Smooth 60fps HUD** — requestAnimationFrame render loop with interpolated counters. Numbers don't jump — they count up.
-- **🎵 Procedural Soundtrack** — Ambient drone music generated entirely via Web Audio API. No sound files. Haunting minor-scale melody, reverb, filtered noise.
-- **📺 Live News Broadcast System** — 15+ unique news stories that evolve with your game. Every 21 days a news popup fires with a real broadcast aesthetic.
-- **☣ Infection Glow Layer** — SVG filters apply a red glow to heavily infected countries. Centroid dots pulse at each epicenter.
-- **📱 Mobile-First** — Safe area insets, 44px touch targets, bottom-sheet country panel, responsive at all screen sizes.
-- **6 Disease Types** — Bacteria, Virus, Fungus, Parasite, Prion, Nano-Virus. Each has unique spread and mutation mechanics.
-- **4 Difficulty Levels** — Casual to Mega-Brutal. Cure research speed, government response thresholds, and spread rates all scale.
-
----
-
-## Screenshots
-
-| Splash Screen | Game Map | Evolution Tree |
-|---|---|---|
-| *coming soon* | *coming soon* | *coming soon* |
+- Interactive D3 world map of 118 countries: pan, zoom, click for per-country stats and whether the outbreak there is growing or burning out
+- 46 traits across transmission, symptoms and abilities, with dependencies and devolving
+- 6 pathogen types and 4 difficulties
+- World events, a news ticker and news stories that follow what is actually happening in the game
+- Procedural soundtrack and sound effects from the Web Audio API (no audio files)
+- Autosave and continue
+- Epidemic curve on the end screen
+- Works on phones
 
 ---
 
 ## How to Play
 
-1. **Choose your pathogen** — pick a type and name it
-2. **Select an origin country** — tap any country on the map, or browse the list
-3. **Stay hidden early** — low symptoms mean slower cure research
-4. **Earn DNA** — it accrues as your disease spreads
-5. **Evolve strategically** — Transmissions first, then Abilities, then lethal Symptoms
-6. **Win** before the cure hits 100%
+1. Pick a pathogen type and name it
+2. Click a country on the map to place patient zero
+3. Spend DNA on transmissions that match where you want to go next
+4. Keep symptoms low while you spread; watch the detection meter
+5. Once everyone is infected, evolve lethal symptoms
+6. Finish before the cure hits 100%
 
-**Pro tip:** Start in a poor, densely populated, warm country (e.g. India, Brazil). Then buy Cold and Heat resistance before going global.
+A poor, populous, well-connected country is a good place to start. Cold and arid countries need the matching resistance.
+
+Keyboard: `Space` pause, `1` `2` `3` speed, `E` evolution, `Esc` close.
 
 ---
 
-## Tech Stack
+## Running locally
 
-| Layer | Technology |
-|---|---|
-| Rendering | D3.js v7 + TopoJSON |
-| Geography | World Atlas (110m resolution) |
-| Audio | Web Audio API (procedural) |
-| Styling | CSS Custom Properties, Flexbox, CSS Grid |
-| Language | Vanilla ES6 JavaScript (IIFE modules) |
-| Hosting | GitHub Pages |
+The scripts load fine from a file, but the map data is fetched from a CDN, so use any static server:
 
-No npm. No webpack. No React. Just files.
+```bash
+python3 -m http.server 8080
+```
+
+Then open http://localhost:8080.
+
+---
+
+## Balancing
+
+[tools/balance.js](tools/balance.js) plays full games headlessly with three scripted players (a careful planner, one that rushes lethal symptoms, and one that buys at random) and prints win rates and game lengths:
+
+```bash
+node tools/balance.js --games 30
+```
+
+```bash
+node tools/balance.js --difficulty severe --type virus
+```
+
+```bash
+node tools/balance.js --trace --bot planner
+```
+
+Current numbers for the planner: roughly 80 to 100% wins on Standard depending on type (60% for Synthetic), 30% on Severe, 5% on Extinction. Rushing lethality or buying at random loses almost every time.
+
+Tuning constants live in the `T` object at the top of `js/game.js`; per-type and per-difficulty multipliers are in `js/data.js`.
 
 ---
 
 ## Project Structure
 
 ```
-pathogen-pandemic-sim/
-├── index.html          # single page app shell
-├── css/
-│   └── style.css       # all styles (~900 lines)
+├── index.html
+├── css/style.css
 ├── js/
-│   ├── data.js         # countries, disease types, evolution tree, events
-│   ├── game.js         # core simulation engine (SIR model, game loop)
-│   ├── map.js          # D3 world map, SVG filters, centroid dots
-│   ├── ui.js           # HUD, toasts, rAF render loop, country panel
-│   ├── evolution.js    # evolution modal, trait cards, devolve logic
-│   ├── events.js       # news ticker, world events, monthly milestones
-│   ├── audio.js        # Web Audio procedural music + SFX
-│   ├── news-popup.js   # weekly in-game news broadcast system
-│   └── main.js         # wiring, screen flow, keyboard shortcuts
-└── _config.yml         # GitHub Pages config
+│   ├── data.js         # countries, pathogen types, difficulties, traits, world events
+│   ├── game.js         # simulation engine (no DOM)
+│   ├── map.js          # D3 world map
+│   ├── ui.js           # HUD, toasts, country panel, end screen
+│   ├── evolution.js    # evolution screen
+│   ├── events.js       # news ticker and milestones
+│   ├── news-popup.js   # news stories
+│   ├── audio.js        # Web Audio music and effects
+│   └── main.js         # screen flow; turns engine events into UI
+└── tools/balance.js    # headless playtests
 ```
 
----
-
-## Local Development
-
-No server needed for most features:
-
-```bash
-# just open it
-open index.html
-
-# or if you need a local server (for any CORS issues)
-npx serve .
-# or
-python -m http.server 8080
-```
-
-The map requires internet to fetch the world atlas GeoJSON from jsDelivr CDN. Everything else works offline.
-
----
-
-## Architecture Notes
-
-**Game Loop:** `setInterval` fires every `750ms / speed` for simulation ticks. A separate `requestAnimationFrame` loop runs at 60fps for smooth HUD rendering — the two are deliberately decoupled so the UI never janks.
-
-**Epidemic Model:** Based on SIR (Susceptible → Infected → Recovered/Dead). New cases per tick = `healthy × infectivity × (prevalence + 0.00003)`. The small floor constant prevents early stall when infected count is tiny.
-
-**Audio:** All sound is generated programmatically. Background music uses three layered oscillators with LFO pitch modulation, filtered white noise, and a convolution reverb for the haunting note layer. No audio files are shipped.
-
-**Map Glow:** SVG `<feGaussianBlur>` filter applied to country `<path>` elements above a threshold. Infection intensity dots rendered at geographic centroids using D3 data joins.
+Libraries (from CDN): D3 7, TopoJSON, Chart.js, GSAP, and the World Atlas 110m map.
 
 ---
 
@@ -130,4 +125,4 @@ MIT — do whatever you want with it.
 
 ---
 
-*Built as a portfolio project. Not affiliated with Ndemic Creations or Plague Inc.*
+*Built as a portfolio project.*
