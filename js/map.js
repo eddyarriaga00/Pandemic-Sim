@@ -61,6 +61,7 @@ const WorldMap = (() => {
     'sea route':     { stroke: 'rgba(0,204,180,0.75)',   glow: 'rgba(0,204,180,0.3)'   },
     'land border':   { stroke: 'rgba(227,179,65,0.75)',  glow: 'rgba(227,179,65,0.3)'  },
     'spore dispersal':{ stroke: 'rgba(188,140,255,0.75)', glow: 'rgba(188,140,255,0.3)' },
+    'smugglers':     { stroke: 'rgba(63,185,80,0.75)',   glow: 'rgba(63,185,80,0.3)'   },
   };
 
   // ─── LOAD ─────────────────────────────────────
@@ -140,7 +141,7 @@ const WorldMap = (() => {
   // height and let the player pan sideways. Pinching out still shows it all.
   function fitProjection(W, H) {
     const fitWidth = W / 6.2;
-    baseScale = Math.max(fitWidth, Math.min(H * 0.21, W / 2.7));
+    baseScale = Math.max(fitWidth, Math.min(H * 0.30, W / 2.7));
     projection.scale(baseScale).translate([W / 2, H / 2.1]);
     if (baseScale > fitWidth) {
       // Start centred on Africa/Eurasia, where most countries are
@@ -499,7 +500,7 @@ const WorldMap = (() => {
 
     if (isSheetLayout()) {
       // Keep the country in the strip of map still visible above the sheet
-      zoomToCountry(iso, Math.max(2.5, _currentZoom.k), 0.22);
+      zoomToCountry(iso, Math.max(2.5, _currentZoom.k), 0.36);
     } else if (_currentZoom.k < 2.5) {
       zoomToCountry(iso, 2.5);
     }
@@ -1109,6 +1110,7 @@ const WorldMap = (() => {
   return {
     load, updateColors, pulseCountry, highlightCountry,
     zoomToCountry, resetZoom, resize, reset, updateGovIcons,
+    focusCountry: iso => { const c = Game.getCountry(iso); if (c) selectCountry(iso, c); },
     setOrigin, colorFor, isReady: () => mapInitialized,
     setPick, showTravelRoute,
   };

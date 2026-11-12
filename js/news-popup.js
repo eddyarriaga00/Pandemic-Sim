@@ -140,10 +140,11 @@ const NewsPopup = (() => {
     _dismissTimer = setTimeout(dismiss, 9500);
 
     document.getElementById('nc-close-btn').onclick = dismiss;
-    document.getElementById('nc-read-more-btn').onclick = () => {
-      dismiss();
-      showFullStory(story, gs.day);
-    };
+    const day  = gs.day;
+    const open = () => { dismiss(); showFullStory(story, day); };
+    document.getElementById('nc-read-more-btn').onclick = open;
+    card.querySelector('.nc-text').onclick = open; // the button is hidden on phones
+
   }
 
   function showFullStory(story, day) {

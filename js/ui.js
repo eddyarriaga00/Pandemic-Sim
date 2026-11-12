@@ -431,6 +431,7 @@ const UI = (() => {
       const grade = score > 15000 ? 'S' : score > 10000 ? 'A' : score > 6000 ? 'B' : 'C';
       gradeEl.textContent = grade;
       gradeEl.style.color = { S: '#ffdd00', A: '#00ff41', B: '#ff8c00', C: '#aaaaaa' }[grade];
+      if (Records.save(gs, score, grade)) scoreEl.textContent += '  ★ NEW BEST';
     } else {
       scoreEl.textContent = `HUMANITY SURVIVES: ${fmt(gs.totalHealthy)} ALIVE`;
       scoreEl.style.color = '#00aaff';
@@ -546,17 +547,131 @@ const UI = (() => {
       .sort((a, b) => (b.infected + b.dead) - (a.infected + a.dead))
       .slice(0, 5);
 
-    panel.innerHTML = sorted.map(c => {
-      const infPct = (c.infected / c.pop * 100).toFixed(1);
+    const html = sorted.map(c => {
+      const infPct = (c.infected / c.pop * 100).toFixed(0);
       const dead   = c.dead > 0 ? ` ☠${fmt(c.dead)}` : '';
       const lockIcon = c.collapsed ? ' 🏚' : c.lockdown ? ' 🔒' : c.airportClosed ? ' ✈' : '';
-      return `<div class="top-country-row">
+      return `<button class="top-country-row" data-iso="${c.iso}">
         <span class="tc-name">${c.name}${lockIcon}</span>
         <span class="tc-stats"><span class="tc-inf">${fmt(c.infected)}</span><span class="tc-dead">${dead}</span></span>
         <div class="tc-bar-wrap"><div class="tc-bar-inf" style="width:${Math.min(100, infPct)}%"></div></div>
-      </div>`;
-    }).join('');
+      </button>`;
+    }).join('') || '<div class="dock-empty">No outbreaks yet</div>';
+    if (html !== _lastTopHtml) { panel.innerHTML = html; _lastTopHtml = html; }
   }
+  let _lastTopHtml = '';
+
+  // ─── DASHBOARD ────────────────────────────────
+  function initDock() {
+    const dock = document.getElementById('dock');
+    if (!dock || dock.dataset.ready) return;
+    dock.dataset.ready = '1';
+    dock.querySelectorAll('.dock-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        dock.querySelectorAll('.dock-tab').forEach(t => t.classList.toggle('active', t === tab));
+        for (const name of ['world', 'hot', 'events']) {
+          document.getElementById('dock-' + name).classList.toggle('hidden', name !== tab.dataset.dock);
+        }
+        if (tab.dataset.dock === 'world') drawSpark();
+      });
+    });
+    // Hotspot rows jump to that country
+    document.getElementById('top-countries-list').addEventListener('click', e => {
+      const row = e.target.closest('.top-country-row');
+      if (row) WorldMap.focusCountry(+row.dataset.iso);
+    });
+    window.addEventListener('resize', () => setTimeout(drawSpark, 200));
+  }
+
+  // Live epidemic curve: infected and dead as a share of the world,
+  // cure progress on its own 0 to 100% scale.
+  function drawSpark() {
+    const canvas = document.getElementById('spark');
+    if (!canvas || !canvas.clientWidth) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke();
+
+    const hist = Game.getHistory();
+    if (hist.length < 2) return;
+    const pop  = Game.getState().totalPop;
+    const step = Math.max(1, Math.floor(hist.length / w));
+    const line = (valueOf, color, fill) => {
+      ctx.beginPath();
+      let lastX = 0;
+      for (let i = 0; i < hist.length; i += step) {
+        const x = lastX = (i / (hist.length - 1)) * w;
+        const y = h - 1 - valueOf(hist[i]) * (h - 3);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+      if (fill) { ctx.lineTo(lastX, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+    };
+    line(d => d.infected / pop, '#e3b341', 'rgba(227,179,65,0.10)');
+    line(d => d.dead / pop,     '#f85149', 'rgba(248,81,73,0.14)');
+    line(d => d.cure / 100,     '#58a6ff');
+  }
+
+  const EFFECT_TEXT = [
+    ['infectivityBoost', v => `+${Math.round(v * 100)}% spread`],
+    ['travelMult',       v => `travel ×${v}`],
+    ['cureResist',       v => `cure −${Math.round(v * 100)}%`],
+    ['lethalityBoost',   () => 'more deaths'],
+    ['severityMask',     () => 'symptoms hidden'],
+    ['climateBoost',     () => 'climate shift'],
+  ];
+  const pretty = id => id.replace(/^op_/, '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+
+  function updateDock() {
+    const gs = Game.getState();
+    const a  = gs.advice;
+    el('ds-sealed', a.sealed); el('ds-lock', a.lockdowns);
+    el('ds-collapsed', a.collapsed); el('ds-burning', a.burning);
+    document.getElementById('ds-burning')?.parentElement.classList.toggle('warn', a.burning >= 3);
+
+    const list = document.getElementById('dock-events-list');
+    if (list) {
+      const html = gs.activeEvents.map(ev => {
+        const fx = EFFECT_TEXT.filter(([k]) => ev.effect[k]).map(([k, f]) => f(ev.effect[k])).join(' · ');
+        const mine = ev.id.startsWith('op_');
+        return `<div class="dock-event${mine ? ' mine' : ''}">
+          <span class="de-name">${ev.name || pretty(ev.id)}</span>
+          <span class="de-fx">${fx}</span>
+          <span class="de-days">${ev.remaining}d</span>
+        </div>`;
+      }).join('') || '<div class="dock-empty">Nothing in effect. World events and your operations show up here.</div>';
+      if (list.dataset.html !== html) { list.innerHTML = html; list.dataset.html = html; }
+    }
+    const count = document.getElementById('dock-events-count');
+    if (count) { count.textContent = gs.activeEvents.length; count.classList.toggle('hidden', !gs.activeEvents.length); }
+
+    if (!document.getElementById('dock-world').classList.contains('hidden')) drawSpark();
+  }
+
+  // ─── RECORDS ──────────────────────────────────
+  // Best winning run per pathogen type and difficulty, kept on this device.
+  const RECORDS_KEY = 'pathogen_records_v1';
+  const Records = {
+    all() { try { return JSON.parse(localStorage.getItem(RECORDS_KEY)) || {}; } catch { return {}; } },
+    get(type, difficulty) { return this.all()[type + '|' + difficulty] || null; },
+    // Returns true if this run beat the previous best.
+    save(gs, score, grade) {
+      const all = this.all(), key = gs.diseaseType + '|' + gs.difficulty;
+      const prev = all[key];
+      const wins = (prev ? prev.wins : 0) + 1;
+      const better = !prev || score > prev.score;
+      all[key] = better ? { score, grade, days: gs.day, wins } : { ...prev, wins };
+      try { localStorage.setItem(RECORDS_KEY, JSON.stringify(all)); } catch {}
+      return better;
+    },
+  };
 
   // ─── SMOOTH RENDER LOOP ───────────────────────
   let _raf  = null;
@@ -673,8 +788,11 @@ const UI = (() => {
     document.querySelector('.dead-stat')?.classList.remove('has-deaths');
     ['hud-inf-rate', 'hud-dead-rate', 'hud-cure-rate', 'cp-inf-rate', 'cp-dead-rate'].forEach(id => el(id, ''));
     for (const k in _cpPrev) delete _cpPrev[k];
+    _lastTopHtml = '';
     const list = document.getElementById('top-countries-list');
     if (list) list.innerHTML = '';
+    initDock();
+    updateDock();
     hideCountryPanel();
     clearToasts();
     updateCureBar(0);
@@ -692,6 +810,7 @@ const UI = (() => {
     showCountryPanel, hideCountryPanel, setNewsText,
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
-    flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton, govSummary, trendFor,
+    flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton,
+    updateDock, Records, govSummary, trendFor,
   };
 })();

@@ -30,7 +30,7 @@ const Game = (() => {
     deathPerLeth: 0.06,                    // daily death rate of the infected at lethality 1
     collapseDeathMult: 4,                  // deaths speed up as a country's dead share grows
     detectThreshold: 150000,               // "noticed cases" needed before the world reacts
-    cureBase: 1.75,                        // % per day at full effort and priority
+    cureBase: 1.95,                        // % per day at full effort and priority
     cureDeployRate: 0.40,                  // share of infected cured per day once deployed
     land: 0.035, air: 0.010, sea: 0.007,   // daily export chances per route
     leak: 0.04,                            // how much gets through a closed route
@@ -58,6 +58,8 @@ const Game = (() => {
     rates: { infected: 0, dead: 0, cure: 0 },
     peakInfected: 0, originIso: null,
     bubbles: [], nextBubbleId: 0,
+    ops: {},      // id -> { readyDay, uses }
+    advice: { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 },
     seed: 1,
   };
 
@@ -71,7 +73,7 @@ const Game = (() => {
   let lastAutosaveDay = 0;
 
   function emptyBoosts() {
-    return { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, climateBoosts: {} };
+    return { infectivity: 0, cureResist: 0, travelMult: 1, lethality: 0, severityMask: 0, climateBoosts: {} };
   }
   function emptyMods() {
     return { air: 0, sea: 0, land: 0, cold: 0, heat: 0, tropical: 0, poor: 0, rich: 0,
@@ -177,6 +179,8 @@ const Game = (() => {
     state.rates = { infected: 0, dead: 0, cure: 0 };
     state.peakInfected = 0; state.originIso = null;
     state.bubbles = []; state.nextBubbleId = 0;
+    state.ops = {};
+    state.advice = { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
     stepCount = 0; history = []; historyStride = 1; dirty = new Set();
     lastAutosaveDay = 0;
 
@@ -253,6 +257,11 @@ const Game = (() => {
     else if (state.phase === 'spreading') startLoop();
   }
 
+  // Severity as the world sees it. Going dormant hides most of it.
+  function visibleSeverity() {
+    return state.severity * (1 - Math.min(0.9, state.eventBoosts.severityMask));
+  }
+
   // ─── PER-COUNTRY RATES ────────────────────────
   function climateMod(c) {
     let m = 1;
@@ -281,7 +290,8 @@ const Game = (() => {
   // Daily death rate of the infected. Good healthcare saves people until
   // the system is swamped; a country that is mostly dead stops coping at all.
   function deathRateFor(c) {
-    const leth = clamp(state.lethality + state.eventBoosts.lethality, 0, 1.2);
+    const leth = clamp(state.lethality + state.eventBoosts.lethality, 0, 1.2) *
+                 (1 - Math.min(0.9, state.eventBoosts.severityMask));
     if (leth <= 0) return 0;
     const deadFrac = c.dead / c.pop;
     const strain   = Math.min(1, deadFrac * 3 + (c.infected / c.pop) * 0.5);
@@ -295,7 +305,7 @@ const Game = (() => {
     stepCount++;
     const newDay = stepCount % STEPS_PER_DAY === 0;
 
-    const sev = state.severity;
+    const sev = visibleSeverity();
     let totI = 0, totD = 0, totS = 0, totR = 0, newCases = 0, newDeaths = 0, notice = 0;
 
     for (const c of countryList) {
@@ -344,6 +354,7 @@ const Game = (() => {
     rollMutation();
     rollWorldEvent();
     if (state.day % 6 === 0) maybeSpawnBubble();
+    if (state.day % 3 === 0) updateAdvice();
     recordHistory();
     emit('day', { day: state.day });
     if (state.day - lastAutosaveDay >= AUTOSAVE_DAYS) { lastAutosaveDay = state.day; saveGame(); }
@@ -398,7 +409,7 @@ const Game = (() => {
 
   // ─── CURE ─────────────────────────────────────
   function advanceCure() {
-    const sev = state.severity;
+    const sev = visibleSeverity();
     let effort = 0, maxEffort = 0;
     for (const c of countryList) {
       const w = c.healthcare * T.wealthCure[c.wealth] * Math.sqrt(c.pop);
@@ -428,7 +439,7 @@ const Game = (() => {
   // ─── GOVERNMENT RESPONSE ──────────────────────
   function governmentResponse() {
     const diff = DIFFICULTIES[state.difficulty];
-    const sev  = state.severity;
+    const sev  = visibleSeverity();
     const worldPanic = (state.totalDead / state.totalPop) * 20 +
                        (state.totalInfected / state.totalPop) * sev * 2;
 
@@ -604,15 +615,18 @@ const Game = (() => {
     } else if (ev.effect.dnaBonus) {
       awardDna(ev.effect.dnaBonus);
     } else {
-      state.activeEvents.push({ id: ev.id, effect: ev.effect, remaining: ev.effect.days });
+      state.activeEvents.push({ id: ev.id, name: ev.name, effect: ev.effect, remaining: ev.effect.days });
       rebuildEventBoosts();
+      emit('events');
     }
   }
 
   function tickEvents() {
     if (!state.activeEvents.length) return;
+    const before = state.activeEvents.length;
     state.activeEvents = state.activeEvents.filter(ev => --ev.remaining > 0);
     rebuildEventBoosts();
+    if (state.activeEvents.length !== before) emit('events');
   }
 
   function rebuildEventBoosts() {
@@ -621,12 +635,74 @@ const Game = (() => {
       if (e.infectivityBoost) b.infectivity += e.infectivityBoost;
       if (e.cureResist)       b.cureResist  += e.cureResist;
       if (e.lethalityBoost)   b.lethality   += e.lethalityBoost;
+      if (e.severityMask)     b.severityMask = Math.max(b.severityMask, e.severityMask);
       if (e.travelMult)       b.travelMult   = Math.max(0.1, b.travelMult * e.travelMult);
       if (e.climateBoost) {
         for (const k in e.climateBoost) b.climateBoosts[k] = (b.climateBoosts[k] || 0) + e.climateBoost[k];
       }
     }
     state.eventBoosts = b;
+  }
+
+  // ─── OPERATIONS ───────────────────────────────
+  const OPS = {};
+  for (const op of OPERATIONS) OPS[op.id] = op;
+
+  function opStatus(id) {
+    const op = OPS[id];
+    const rec = state.ops[id] || { readyDay: 0, uses: 0 };
+    const cost = op.cost + op.costStep * rec.uses;
+    const wait = Math.max(0, rec.readyDay - state.day);
+    const running = state.activeEvents.find(e => e.id === 'op_' + id);
+    let blocked = null;
+    if (state.phase !== 'spreading')            blocked = 'Not in play';
+    else if (state.cureDeployed)                blocked = 'Too late: the cure is out';
+    else if (running)                           blocked = `Active: ${running.remaining} days left`;
+    else if (wait > 0)                          blocked = `Ready in ${wait} days`;
+    else if (op.needsCure && !state.cureActive) blocked = 'Nothing to disrupt yet';
+    else if (op.special === 'smuggle' && !countryList.some(canReceive)) blocked = 'No uninfected country left';
+    return { cost, wait, blocked, affordable: state.dna >= cost, uses: rec.uses };
+  }
+
+  function useOperation(id) {
+    const op = OPS[id];
+    if (!op) return { ok: false, msg: 'Unknown operation' };
+    const st = opStatus(id);
+    if (st.blocked)     return { ok: false, msg: st.blocked };
+    if (!st.affordable) return { ok: false, msg: 'Not enough DNA' };
+
+    state.dna      -= st.cost;
+    state.dnaSpent += st.cost;
+    state.ops[id]   = { readyDay: state.day + op.cooldown, uses: st.uses + 1 };
+
+    if (op.special === 'smuggle') {
+      // Sealed countries first: they are the ones nothing else can reach.
+      const targets = countryList.filter(canReceive).sort((a, b) =>
+        (b.airportClosed + b.portClosed + b.borderClosed) - (a.airportClosed + a.portClosed + a.borderClosed) ||
+        b.pop - a.pop);
+      const src = state.countries[state.originIso];
+      for (const dst of targets.slice(0, 2)) seedCountry(dst, 'smugglers', src ? src.iso : null);
+    } else {
+      state.activeEvents.push({ id: 'op_' + id, name: op.name, effect: op.effect, remaining: op.effect.days });
+      rebuildEventBoosts();
+    }
+    toast(`${op.icon} ${op.name} underway`, 'dna');
+    emit('ops', { id });
+    emit('events');
+    return { ok: true };
+  }
+
+  // ─── ADVICE ───────────────────────────────────
+  // Counts the UI uses to warn the player about slow-burning problems.
+  function updateAdvice() {
+    const a = { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
+    for (const c of countryList) {
+      if (c.collapsed) a.collapsed++;
+      else if (c.lockdown) a.lockdowns++;
+      if (!c.reached && c.airportClosed && c.portClosed) a.sealed++;
+      if (c.infected > 0 && c.healthy > c.pop * 0.02 && reproductionFor(c) < 1) a.burning++;
+    }
+    state.advice = a;
   }
 
   // ─── DNA BUBBLES ──────────────────────────────
@@ -768,6 +844,8 @@ const Game = (() => {
     state.traits     = new Set(d.state.traits);
     state.freeTraits = new Set(d.state.freeTraits);
     state.paused     = true;
+    state.ops     = d.state.ops || {};
+    state.advice  = d.state.advice || { burning: 0, sealed: 0, lockdowns: 0, collapsed: 0 };
     rngState      = d.rngState;
     stepCount     = d.stepCount;
     history       = d.history || [];
@@ -823,6 +901,7 @@ const Game = (() => {
     getMods: () => mods,
     betaFor, deathRateFor, reproductionFor,
     getBubbles, collectBubble,
+    opStatus, useOperation, getOperations: () => OPERATIONS,
     saveGame, loadSave, hasSave, clearSave, getSaveMeta,
   };
 })();

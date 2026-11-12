@@ -48,6 +48,10 @@ const BOTS = {
   planner(G) {
     const gs = G.getState();
     const everyoneInfected = gs.totalHealthy / gs.totalPop < 0.002;
+    const ready = id => { const s = G.opStatus(id); return !s.blocked && s.affordable; };
+    if (ready('disinfo') && gs.cureProgress > 35) G.useOperation('disinfo');
+    if (ready('smugglers') && gs.advice.sealed > 0 && gs.dna >= 14) G.useOperation('smugglers');
+    if (ready('superspreader') && gs.day > 40 && gs.dna >= 16 && !everyoneInfected) G.useOperation('superspreader');
     if (everyoneInfected || gs.cureProgress > 70) { while (buyFirst(G, KILL_ORDER)) {} return; }
     for (const id of gs.freeTraits) G.devolveTrait(id); // shed unwanted mutations while hiding
     if (gs.cureProgress > 25 && buyFirst(G, RESIST_ORDER)) return;

@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=9">
+  <link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -83,6 +83,10 @@
         <div class="howto-section">
           <h3>🔬 DETECTION &amp; CURE</h3>
           <p>Visible symptoms and deaths fill the detection meter. Once identified, research begins and governments start closing routes. Dead and sick researchers cure nothing.</p>
+        </div>
+        <div class="howto-section">
+          <h3>🎯 OPERATIONS</h3>
+          <p>The OPS tab in EVOLVE has one-off actions: smuggle the pathogen into sealed countries, go dormant to hide, stage superspreader events, or stall the cure with disinformation.</p>
         </div>
         <div class="howto-section">
           <h3>🗺 MAP</h3>
@@ -347,10 +351,27 @@
     <!-- MAP RICH TOOLTIP -->
     <div id="map-rich-tooltip" class="map-rich-tooltip hidden"></div>
 
-    <!-- TOP INFECTED COUNTRIES -->
-    <div class="top-countries-panel" id="top-countries-panel">
-      <div class="tc-header">TOP INFECTED</div>
-      <div id="top-countries-list"></div>
+    <!-- DASHBOARD: under the map in portrait, floating bottom-left on wide screens -->
+    <div class="dock" id="dock">
+      <div class="dock-tabs">
+        <button class="dock-tab active" data-dock="world">WORLD</button>
+        <button class="dock-tab" data-dock="hot">HOTSPOTS</button>
+        <button class="dock-tab" data-dock="events">ACTIVE<span id="dock-events-count" class="dock-count hidden">0</span></button>
+      </div>
+      <div class="dock-pane" id="dock-world">
+        <canvas id="spark" class="spark"></canvas>
+        <div class="dock-legend">
+          <span class="lg lg-inf">Infected</span><span class="lg lg-dead">Dead</span><span class="lg lg-cure">Cure</span>
+        </div>
+        <div class="dock-stats">
+          <div><b id="ds-sealed">0</b><span>Sealed off</span></div>
+          <div><b id="ds-lock">0</b><span>Lockdowns</span></div>
+          <div><b id="ds-collapsed">0</b><span>Collapsed</span></div>
+          <div><b id="ds-burning">0</b><span>Burning out</span></div>
+        </div>
+      </div>
+      <div class="dock-pane hidden" id="dock-hot"><div id="top-countries-list"></div></div>
+      <div class="dock-pane hidden" id="dock-events"><div id="dock-events-list"></div></div>
     </div>
 
     <!-- COUNTRY INFO PANEL -->
@@ -513,6 +534,7 @@
         <button class="evo-tab active" data-tab="transmissions">📡 TRANSMISSION</button>
         <button class="evo-tab" data-tab="symptoms">🤒 SYMPTOMS</button>
         <button class="evo-tab" data-tab="abilities">🛡 ABILITIES</button>
+        <button class="evo-tab" data-tab="operations">🎯 OPS</button>
       </div>
 
       <div id="evo-tab-transmissions" class="evo-tab-content active">
@@ -523,6 +545,10 @@
       </div>
       <div id="evo-tab-abilities" class="evo-tab-content hidden">
         <div id="tree-abilities" class="trait-grid"></div>
+      </div>
+      <div id="evo-tab-operations" class="evo-tab-content hidden">
+        <p class="ops-intro">One-off actions. Each has a cooldown and costs more every time you use it.</p>
+        <div id="tree-operations" class="trait-grid"></div>
       </div>
     </div>
   </div>
@@ -567,14 +593,14 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=9"></script>
-  <script src="js/game.js?v=9"></script>
-  <script src="js/map.js?v=9"></script>
-  <script src="js/evolution.js?v=9"></script>
-  <script src="js/ui.js?v=9"></script>
-  <script src="js/events.js?v=9"></script>
-  <script src="js/audio.js?v=9"></script>
-  <script src="js/news-popup.js?v=9"></script>
-  <script src="js/main.js?v=9"></script>
+  <script src="js/data.js?v=10"></script>
+  <script src="js/game.js?v=10"></script>
+  <script src="js/map.js?v=10"></script>
+  <script src="js/evolution.js?v=10"></script>
+  <script src="js/ui.js?v=10"></script>
+  <script src="js/events.js?v=10"></script>
+  <script src="js/audio.js?v=10"></script>
+  <script src="js/news-popup.js?v=10"></script>
+  <script src="js/main.js?v=10"></script>
 </body>
 </html>

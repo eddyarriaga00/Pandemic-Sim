@@ -242,7 +242,7 @@ const DISEASE_TYPES = {
     infectivityMod: 1.6,
     severityMod:   1.0,
     lethalityMod:  1.2,
-    cureMod:       0.85,
+    cureMod:       0.75,
     dnaMod:        1.5,
     mutationRate:  0.010,
     startingTraits: [],
@@ -759,6 +759,37 @@ const EVOLUTION_TREE = {
     },
   ],
 };
+
+// ─── OPERATIONS ──────────────────────────────────
+// One-off actions the player triggers with DNA. Each has a cooldown and
+// gets more expensive every time it is used.
+// effect: a timed boost (same fields as world events) or a special action.
+const OPERATIONS = [
+  {
+    id: 'superspreader', name: 'Superspreader Events', icon: '🎉',
+    desc: 'Engineer outbreaks at festivals, stadiums and transit hubs. Spreads faster everywhere and travels further for 20 days.',
+    cost: 5, costStep: 2, cooldown: 50,
+    effect: { infectivityBoost: 0.12, travelMult: 1.6, days: 20 },
+  },
+  {
+    id: 'smugglers', name: 'Smuggling Network', icon: '🚤',
+    desc: 'Carriers slip past closed airports, ports and borders. Infects up to two countries that have none of your pathogen, sealed ones first.',
+    cost: 8, costStep: 3, cooldown: 60,
+    special: 'smuggle',
+  },
+  {
+    id: 'dormancy', name: 'Go Dormant', icon: '😴',
+    desc: 'Suppress symptoms for 30 days. Far fewer deaths, and doctors and governments see much less of you. Spread is unaffected.',
+    cost: 7, costStep: 3, cooldown: 90,
+    effect: { severityMask: 0.7, days: 30 },
+  },
+  {
+    id: 'disinfo', name: 'Disinformation Campaign', icon: '📢',
+    desc: 'Flood the world with fake cures and conspiracy theories. Cure research slows to a crawl for 30 days.',
+    cost: 6, costStep: 3, cooldown: 80, needsCure: true,
+    effect: { cureResist: 0.45, days: 30 },
+  },
+];
 
 // ─── WORLD EVENTS ────────────────────────────────
 // prob: chance per game day. days: how long a timed effect lasts.

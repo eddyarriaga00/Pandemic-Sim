@@ -133,6 +133,7 @@ const Events = (() => {
   // ─── ON TICK: MILESTONES ──────────────────────
   function onTick(gs) {
     if (!gs || gs.phase !== 'spreading') return;
+    if (gs.day % 3 === 0) checkAdvice(gs);
 
     // Infection milestones
     for (const m of INF_MILESTONES) {
@@ -201,7 +202,36 @@ const Events = (() => {
     for (const k of [25, 50, 75, 90])  if (gs.cureProgress >= k) _milestones.dna.add('c' + k);
   }
 
+  // ─── ADVISOR ──────────────────────────────────
+  // Slow-burning problems the player may not notice on the map. Each
+  // warning repeats at most every `every` days while it stays true.
+  const ADVICE = [
+    { key: 'burning', every: 60, type: 'warn',
+      test: gs => gs.advice.burning >= 3,
+      msg:  gs => `⚠ Burning out in ${gs.advice.burning} countries: hosts are dying faster than it spreads there` },
+    { key: 'sealed', every: 80, type: 'warn',
+      test: gs => gs.advice.sealed >= 2 && gs.countriesInfected > 30,
+      msg:  gs => `🚫 ${gs.advice.sealed} uninfected countries have sealed themselves off. Smugglers can still get in.` },
+    { key: 'hoard', every: 70, type: 'dna',
+      test: gs => gs.dna >= 18 && gs.day > 25,
+      msg:  gs => `⚡ ${gs.dna} DNA unspent. Open EVOLVE to put it to work.` },
+    { key: 'ready', every: 9999, type: 'alert',
+      test: gs => gs.totalHealthy / gs.totalPop < 0.01 && gs.lethality < 0.05 && gs.totalInfected > 0,
+      msg:  () => '☣ Nearly everyone is infected. Time to turn lethal.' },
+  ];
+  const _adviceAt = {};
+
+  function checkAdvice(gs) {
+    for (const a of ADVICE) {
+      if (gs.day - (_adviceAt[a.key] ?? -1e9) < a.every || !a.test(gs)) continue;
+      _adviceAt[a.key] = gs.day;
+      UI.toast(a.msg(gs), a.type);
+      return; // one at a time
+    }
+  }
+
   function resetMilestones() {
+    for (const k in _adviceAt) delete _adviceAt[k];
     _milestones.infected.clear();
     _milestones.dead.clear();
     _milestones.countries.clear();

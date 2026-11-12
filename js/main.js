@@ -320,8 +320,25 @@ The rest is biology.
       document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedDifficulty = btn.dataset.diff;
+      showRecords();
     });
   });
+
+  // Best winning run for each pathogen type at the chosen difficulty.
+  function showRecords() {
+    document.querySelectorAll('.type-card').forEach(card => {
+      card.querySelector('.type-best')?.remove();
+      const rec = UI.Records.get(card.dataset.type, selectedDifficulty);
+      if (!rec) return;
+      const badge = document.createElement('span');
+      badge.className = 'type-best';
+      badge.textContent = `★ ${rec.grade} · ${rec.days} days`;
+      card.appendChild(badge);
+    });
+  }
+  new MutationObserver(() => {
+    if (document.getElementById('screen-setup').classList.contains('active')) showRecords();
+  }).observe(document.getElementById('screen-setup'), { attributes: true, attributeFilter: ['class'] });
 
   document.getElementById('btn-back-setup').addEventListener('click', () => {
     Events.cleanup();
@@ -711,7 +728,16 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       case 'step':
         WorldMap.updateColors(d.dirty);
         break;
+      case 'events':
+        UI.updateDock();
+        break;
+      case 'ops':
+        UI.updateDnaDisplay();
+        UI.checkEvoAvailable();
+        break;
       case 'day':
+        UI.updateDock();
+        if (Evolution.isOpen()) Evolution.renderOps(); // cooldowns tick down
         Events.onTick(gs);
         if (d.day % 30 === 0) Events.onMonthTick();
         NewsPopup.check(d.day);

@@ -66,11 +66,46 @@ const Evolution = (() => {
     renderTab('transmissions');
     renderTab('symptoms');
     renderTab('abilities');
+    renderOps();
     UI.updateStatBars();
     document.getElementById('evo-dna-count').textContent = Game.getState().dna;
   }
 
+  function isOpen() {
+    return !document.getElementById('modal-evolution').classList.contains('hidden');
+  }
+
+  // ─── OPERATIONS ───────────────────────────────
+  function renderOps() {
+    const container = document.getElementById('tree-operations');
+    if (!container) return;
+    container.innerHTML = Game.getOperations().map(op => {
+      const st = Game.opStatus(op.id);
+      const ready = !st.blocked && st.affordable;
+      const status = st.blocked
+        ? `<span class="trait-cost locked-cost">${st.blocked}</span>`
+        : `<span class="trait-cost ${st.affordable ? '' : 'cant-afford'}">⚡ ${st.cost} DNA</span>
+           <span class="op-go">${st.affordable ? 'DEPLOY ›' : ''}</span>`;
+      return `<div class="trait-card op-card${ready ? ' op-ready' : ''}${st.blocked ? ' locked' : ''}" data-op="${op.id}">
+        <span class="trait-icon">${op.icon}</span>
+        <div class="trait-name">${op.name}</div>
+        <div class="trait-desc">${op.desc}</div>
+        <div class="trait-effects">${op.cooldown} day cooldown${st.uses ? ` · used ${st.uses}×` : ''}</div>
+        <div class="trait-footer">${status}</div>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.op-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const result = Game.useOperation(card.dataset.op);
+        if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? '⚡ Not enough DNA!' : result.msg, 'red');
+        else AudioEngine.sfxTraitPurchase();
+        renderOps();
+      });
+    });
+  }
+
   function renderTab(tab) {
+    if (tab === 'operations') return renderOps();
     const container = document.getElementById(`tree-${tab}`);
     if (!container) return;
 
@@ -175,5 +210,5 @@ const Evolution = (() => {
     setTimeout(() => el.remove(), 1400);
   }
 
-  return { init, open, close, refreshTree, renderTab };
+  return { init, open, close, refreshTree, renderTab, renderOps, isOpen };
 })();
