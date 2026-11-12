@@ -93,7 +93,7 @@ const NewsPopup = (() => {
         <span class="nc-channel">${story.channel}</span>
         <span class="nc-tag" style="background:${tagColor}">${story.tag}</span>
         <span class="nc-day">DAY ${gs.day}</span>
-        <button class="nc-close" id="nc-close-btn">✕</button>
+        <button class="nc-close" id="nc-close-btn" aria-label="Dismiss">${UI.icon('x')}</button>
       </div>
       <div class="nc-content">
         <div class="nc-text">
@@ -161,7 +161,7 @@ const NewsPopup = (() => {
     const btn  = document.getElementById('btn-close-news');
     const span = document.getElementById('news-close-label');
     btn.disabled = false;
-    span.textContent = 'CLOSE ✕';
+    span.textContent = 'CLOSE';
     btn.onclick = () => modal.classList.add('hidden');
 
     modal.classList.remove('hidden');

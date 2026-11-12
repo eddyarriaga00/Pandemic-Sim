@@ -2486,3 +2486,213 @@ button.top-country-row:active, button.top-country-row:hover { background: rgba(2
 .tl-day  { flex: 0 0 62px; font-family: var(--font-mono); font-size: 0.62rem; color: var(--tx-3); padding-top: 1px; }
 .tl-text { color: var(--tx-1); line-height: 1.4; }
 #btn-share { width: 100%; max-width: 320px; }
+
+/* ═══════════════════════════════════════════════
+   LOOK AND FEEL
+   One icon set, a display face for labels and headings, and a restyle
+   of the title screen, HUD and cards. Later rules win over the originals.
+   ═══════════════════════════════════════════════ */
+:root { --font-display: 'Barlow Condensed', 'Inter', system-ui, sans-serif; }
+
+/* Icons */
+.ic {
+  width: 1.1em; height: 1.1em; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+  vertical-align: -0.18em;
+}
+button .ic { pointer-events: none; }
+
+/* Display face: headings, labels, buttons */
+.game-title, .setup-title, #gameover-title, .evo-header h2, .pm-disease-name,
+.dl-head h2, .countries-head h2, .howto-modal h2, .settings-modal h2,
+.btn-primary, .btn-secondary, .pm-btn, .btn-evolve, .evo-tab, .dock-tab, .diff-btn,
+.hud-label, .lane-title, .type-name, .news-label, .dl-kicker, .origin-inner h3,
+.go-chart-label, .settings-section-title, .howto-section h3, .cc-yes, .cc-no,
+.day-counter, .countries-badge, .detect-label, .classified-stamp, .trait-name, .dl-label {
+  font-family: var(--font-display);
+}
+.btn-primary, .btn-secondary, .pm-btn, .btn-evolve, .cc-yes, .cc-no {
+  text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;
+}
+.btn-primary   { font-size: 1.02rem; border-radius: 6px; }
+.btn-secondary { font-size: 0.92rem; border-radius: 6px; }
+.btn-primary .ic, .btn-secondary .ic, .pm-btn .ic { margin-right: 6px; }
+.trait-name { font-size: 1.02rem; letter-spacing: 0.02em; }
+.dl-label   { font-size: 1.08rem; letter-spacing: 0.02em; }
+.type-name  { font-size: 0.95rem; letter-spacing: 0.1em; }
+.lane-title { font-size: 0.7rem; }
+.evo-tab    { font-size: 0.86rem; letter-spacing: 0.08em; }
+.evo-tab .ic { margin-right: 5px; }
+.dock-tab   { font-size: 0.74rem; }
+.diff-btn   { font-size: 0.8rem; letter-spacing: 0.1em; }
+.howto-section h3, .settings-section-title { font-size: 0.86rem; letter-spacing: 0.14em; color: var(--red); }
+
+/* ─── Title screen ─── */
+#screen-splash::before { display: none; }
+.splash-canvas { opacity: 1; }
+.splash-content { gap: 14px; padding-bottom: 80px; }
+/* A dark pool behind the text so it reads against the map */
+.splash-content::before {
+  content: ''; position: absolute; inset: -60px -80px; z-index: -1;
+  background: radial-gradient(closest-side, rgba(8,11,16,0.94) 35%, rgba(8,11,16,0.7) 62%, transparent);
+  pointer-events: none;
+}
+.game-title {
+  font-size: clamp(4rem, 19vw, 7.2rem); font-weight: 700;
+  letter-spacing: 0.06em; margin-right: -0.06em; line-height: 0.9;
+  text-shadow: 0 0 44px rgba(248,81,73,0.35);
+}
+.game-title::after { height: 3px; width: 100%; margin-top: 12px; background: linear-gradient(90deg, transparent, var(--red) 20%, var(--red) 80%, transparent); }
+.game-subtitle { font-family: var(--font-display); font-size: 0.86rem; letter-spacing: 0.42em; margin-right: -0.42em; color: var(--tx-2); }
+.splash-pills { margin-bottom: 10px; }
+.stat-pill { background: rgba(8,11,16,0.6); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.06em; }
+.btn-daily { margin-top: 0; background: rgba(8,11,16,0.55); }
+.btn-daily .daily-title { font-size: 0.92rem; }
+.btn-daily .daily-sub { font-family: var(--font); letter-spacing: 0; }
+.btn-load-save { background: rgba(8,11,16,0.55); }
+.splash-secondary-btns .btn-secondary { background: rgba(8,11,16,0.55); padding-left: 12px; padding-right: 12px; }
+
+/* ─── Setup: pathogen cards ─── */
+.setup-title { font-size: 1.5rem; letter-spacing: 0.16em; font-weight: 700; }
+.type-card { gap: 5px; padding: 14px 12px 12px; }
+.type-icon { font-size: 1.9rem; line-height: 1; margin-bottom: 4px; color: var(--tx-2); transition: color 0.15s; }
+.type-icon .ic { stroke-width: 1.5; }
+.type-card.selected .type-icon { color: var(--red); }
+.type-stats { width: 100%; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ts-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; gap: 6px; }
+.ts-row span { font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tx-3); white-space: nowrap; }
+.ts-bar { height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+.ts-bar i { display: block; height: 100%; background: var(--tx-2); border-radius: 2px; transition: background 0.15s; }
+.type-card.selected .ts-bar i { background: var(--red); }
+.type-best { top: 10px; right: 10px; }
+
+/* ─── Briefing and end screen icons ─── */
+.briefing-icon { font-size: 3.4rem; line-height: 1; color: var(--red); filter: drop-shadow(0 0 14px rgba(248,81,73,0.45)); }
+.briefing-icon .ic { stroke-width: 1.3; }
+.gameover-icon { font-size: 4rem; line-height: 1; }
+.gameover-icon .ic { stroke-width: 1.3; }
+.gameover-icon.win  { color: var(--red); }
+.gameover-icon.lose { color: var(--blue); }
+#gameover-title { font-size: 2.3rem; letter-spacing: 0.1em; font-weight: 700; }
+.loader-biohazard { font-size: 2.6rem; color: var(--red); }
+.origin-icon { color: var(--red); }
+
+/* ─── HUD ─── */
+.hud-top {
+  background: linear-gradient(180deg, rgba(10,14,20,0.98), rgba(8,11,16,0.9));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.hud-stat { gap: 9px; padding: 9px 10px; border-right-color: rgba(255,255,255,0.05); }
+.hud-icon { font-size: 1.25rem; opacity: 1; display: flex; }
+.dead-stat .hud-icon     { color: var(--red); }
+.infected-stat .hud-icon { color: var(--amber); }
+.healthy-stat .hud-icon  { color: var(--tx-2); }
+.cure-stat .hud-icon     { color: var(--blue); }
+.hud-label  { font-size: 0.68rem; letter-spacing: 0.16em; font-weight: 600; color: var(--tx-2); }
+.hud-number { font-size: 1.02rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.music-btn { display: flex; align-items: center; justify-content: center; font-size: 1.05rem; position: relative; }
+.music-btn.muted::after {
+  content: ''; position: absolute; width: 22px; height: 2px; background: currentColor;
+  transform: rotate(-45deg); border-radius: 1px;
+}
+
+.countries-badge, .day-counter {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.86rem; letter-spacing: 0.1em; font-weight: 600;
+  border-radius: 6px; padding: 4px 10px;
+}
+.countries-badge .ic { color: var(--tx-2); }
+.detect-meter { border-radius: 6px; }
+.detect-label { font-size: 0.7rem; letter-spacing: 0.14em; font-weight: 600; }
+.map-reset-btn { border-radius: 6px; }
+
+/* Bottom bar */
+.hud-bottom { background: linear-gradient(0deg, rgba(10,14,20,0.99), rgba(8,11,16,0.94)); border-top-color: rgba(255,255,255,0.06); }
+.dna-display { border-radius: 6px; gap: 6px; }
+.dna-icon { display: flex; font-size: 1rem; color: var(--green); }
+.dna-label { font-family: var(--font-display); font-size: 0.72rem; letter-spacing: 0.12em; }
+.btn-evolve {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 1.05rem; letter-spacing: 0.16em; border-radius: 6px;
+  background: linear-gradient(180deg, rgba(139,87,229,0.26), rgba(139,87,229,0.12));
+  color: #d6bcff;
+}
+.btn-evolve .ic { font-size: 1.15rem; }
+.evo-dot { top: 6px; right: 7px; }
+/* Speed: one segmented control instead of four loose buttons */
+.speed-controls { gap: 0; border: 1px solid var(--bdr-2); border-radius: 6px; overflow: hidden; }
+.speed-btn { border: none; border-radius: 0; border-right: 1px solid var(--bdr-2); background: var(--bg-2); font-size: 0.78rem; }
+.speed-btn:last-child { border-right: none; }
+.speed-btn .ic { font-size: 1rem; }
+.speed-btn.active { background: rgba(248,81,73,0.16); color: var(--red); }
+.news-label { font-size: 0.74rem; letter-spacing: 0.14em; border-radius: 2px; }
+
+/* ─── Cards, badges, small details ─── */
+.trait-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; font-size: 1.3rem; line-height: 1;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--bdr-2); border-radius: 10px;
+  margin-bottom: 6px;
+}
+.trait-card.owned .trait-icon   { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.35); }
+.trait-card.buyable .trait-icon { border-color: rgba(188,140,255,0.5); }
+.trait-cost .ic, .trait-owned-badge .ic { margin-right: 2px; }
+.evo-header h2 { display: flex; align-items: center; gap: 8px; font-size: 1.35rem; letter-spacing: 0.14em; }
+.evo-header h2 .ic { color: var(--purple); }
+.evo-dna-icon { display: flex; color: var(--green); }
+.evo-close, #cp-close, .nc-close { display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+.dl-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; font-size: 1.5rem;
+  background: rgba(227,179,65,0.08); border: 1px solid rgba(227,179,65,0.3); border-radius: 12px;
+}
+.dl-head h2 { font-size: 1.5rem; letter-spacing: 0.06em; }
+.dl-kicker  { font-size: 0.78rem; letter-spacing: 0.22em; }
+.pm-btn { display: flex; align-items: center; justify-content: center; font-size: 0.95rem; }
+.pm-disease-name { letter-spacing: 0.08em; }
+
+/* Status badges: a coloured dot instead of an emoji */
+.cp-status-badge, .rtt-status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); letter-spacing: 0.12em; font-weight: 600; }
+.cp-status-badge::before, .rtt-status::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0;
+}
+.tc-dead .ic { font-size: 0.8em; margin-right: 2px; }
+.tc-flag { font-size: 0.8em; margin-left: 5px; color: var(--tx-2); }
+.origin-back-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--font-display); letter-spacing: 0.1em; font-size: 0.8rem; text-transform: uppercase; }
+.daily-title { display: inline-flex; align-items: center; gap: 7px; }
+
+/* Countries change colour smoothly rather than snapping */
+@media (pointer: fine) { .country-path { transition: fill 0.9s ease, opacity 0.2s; } }
+
+@media (max-width: 540px) {
+  .hud-label  { font-size: 0.6rem; letter-spacing: 0.12em; }
+  .hud-number { font-size: 0.86rem; }
+  .hud-icon   { font-size: 1rem; }
+  .hud-stat   { gap: 6px; padding: 8px 6px; }
+  .btn-evolve { font-size: 0.92rem; letter-spacing: 0.12em; }
+  .evo-tab    { font-size: 0.72rem; letter-spacing: 0.04em; }
+  .evo-tab .ic { display: none; }
+  .ts-row { grid-template-columns: 1fr; gap: 2px; }
+  .type-name { font-size: 0.86rem; }
+  .countries-badge, .day-counter { font-size: 0.76rem; }
+  .game-subtitle { font-size: 0.72rem; letter-spacing: 0.3em; margin-right: -0.3em; }
+}
+
+/* The cure readout in the HUD already says this, and it sat under the day counter */
+.cure-label { display: none; }
+.splash-content::before { inset: -90px -150px; background: radial-gradient(closest-side, rgba(8,11,16,0.96) 40%, rgba(8,11,16,0.72) 66%, transparent); }
+
+/* Wide screens: country facts dock on the right so the country you clicked stays in view */
+@media (min-width: 541px) and (min-height: 501px) {
+  .country-panel {
+    left: auto; right: 12px; bottom: 104px; transform: none;
+    width: min(320px, 44vw);
+    animation: panelIn2 0.22s ease-out;
+  }
+}
+
+/* Centring a column taller than the screen cuts off its top. Let it start at
+   the top and centre only when there is room to spare. */
+#screen-gameover { justify-content: flex-start; }
+.gameover-content { margin: auto 0; padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: 28px; }

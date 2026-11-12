@@ -42,6 +42,9 @@ The engine ([js/game.js](js/game.js)) has no DOM, audio or map code in it. It pu
 - Interactive D3 world map of 118 countries: pan, zoom, click for per-country stats and whether the outbreak there is growing or burning out
 - 46 traits across transmission, symptoms and abilities, with dependencies and devolving
 - 6 pathogen types and 4 difficulties
+- A title screen where an outbreak sweeps across a dot-matrix world map
+- One stroke-drawn icon set and a condensed display face throughout, in place of emoji
+- Faint arcs travelling between infected countries along the routes that are actually open
 - Infection drawn as points that spread across each country from where the pathogen entered, and turn to ash as people die
 - Evolution screen laid out as trait trees, with each chain shown as a path
 - Daily Outbreak: one fixed pathogen, starting country and random seed per day, with a shareable result

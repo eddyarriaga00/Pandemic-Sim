@@ -14,6 +14,21 @@ const UI = (() => {
 
   function pct(v) { return (Math.min(100, v * 100)).toFixed(1) + '%'; }
 
+  // Inline icon from the sprite in index.html.
+  function icon(name, cls) {
+    return `<svg class="ic${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  }
+  // A short vibration on phones that support it (Android; iOS ignores it).
+  function buzz(pattern) {
+    const tapped = !navigator.userActivation || navigator.userActivation.hasBeenActive; // browsers block it before the first tap
+    if (navigator.vibrate && tapped && window.matchMedia('(pointer: coarse)').matches) {
+      try { navigator.vibrate(pattern); } catch { /* blocked until the first tap */ }
+    }
+  }
+  // Messages from the engine and events carry an emoji prefix. The toast's
+  // coloured edge already says what kind it is, so drop the prefix.
+  const stripLead = msg => msg.replace(/^[^\p{L}\p{N}+]+\s*/u, '');
+
   // ─── SCREENS ──────────────────────────────────
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => {
@@ -47,11 +62,11 @@ const UI = (() => {
     if (pctVal > 75) {
       bar.style.background = 'linear-gradient(90deg, #cc2200, #ff0000)';
       bar.style.boxShadow  = '0 0 12px rgba(255,0,0,0.9)';
-      if (lbl) { lbl.textContent = '⚠ CURE CLOSE'; lbl.classList.add('visible'); }
+      if (lbl) { lbl.textContent = 'CURE CLOSE'; lbl.classList.add('visible'); }
     } else if (pctVal > 40) {
       bar.style.background = 'linear-gradient(90deg, #cc7700, #ffbb00)';
       bar.style.boxShadow  = '0 0 10px rgba(255,180,0,0.7)';
-      if (lbl) { lbl.textContent = '🔬 CURE ADVANCING'; lbl.classList.add('visible'); }
+      if (lbl) { lbl.textContent = 'CURE ADVANCING'; lbl.classList.add('visible'); }
     } else {
       bar.style.background = 'linear-gradient(90deg, #00aacc, #00ddff)';
       bar.style.boxShadow  = '0 0 10px rgba(0,180,255,0.8)';
@@ -180,7 +195,7 @@ const UI = (() => {
       cure: 'toast-cure', dna: 'toast-dna',
     }[type] || '';
     t.className = `toast ${typeClass}`.trim();
-    t.textContent = msg;
+    t.textContent = stripLead(msg);
     container.appendChild(t);
 
     // Auto-dismiss
@@ -209,7 +224,7 @@ const UI = (() => {
   function setNewsText(msg) {
     const el = document.getElementById('news-text');
     if (!el) return;
-    el.textContent = msg;
+    el.textContent = stripLead(msg);
     el.style.animation = 'none';
     el.offsetHeight;  // reflow
     el.style.animation = '';
@@ -284,15 +299,15 @@ const UI = (() => {
       const deadPct2 = country.dead / country.pop;
       let status, cls;
       if (deadPct2 > 0.5) {
-        status = '💀 DEVASTATED'; cls = 'status-lost';
+        status = 'DEVASTATED'; cls = 'status-lost';
       } else if (infPct2 > 0.3 || deadPct2 > 0.1) {
-        status = '🔴 CRITICAL'; cls = 'status-critical';
+        status = 'CRITICAL'; cls = 'status-critical';
       } else if (infPct2 > 0.05) {
-        status = '🟠 SPREADING'; cls = 'status-spreading';
+        status = 'SPREADING'; cls = 'status-spreading';
       } else if (infPct2 > 0) {
-        status = '🟡 EMERGING'; cls = 'status-emerging';
+        status = 'EMERGING'; cls = 'status-emerging';
       } else {
-        status = '🟢 CLEAR'; cls = 'status-clear';
+        status = 'CLEAR'; cls = 'status-clear';
       }
       statusEl.textContent = status;
       statusEl.className = 'cp-status-badge ' + cls;
@@ -312,10 +327,10 @@ const UI = (() => {
 
   function routeSummary(c) {
     const parts = [];
-    if (c.airports > 0) parts.push(`✈ ${c.airports}`);
-    if (c.ports > 0)    parts.push(`⚓ ${c.ports}`);
-    parts.push(`🛣 ${c.borders.length}`);
-    return parts.join('  ');
+    if (c.airports > 0) parts.push(`Air ${c.airports}`);
+    if (c.ports > 0)    parts.push(`Sea ${c.ports}`);
+    parts.push(`Land ${c.borders.length}`);
+    return parts.join(' · ');
   }
 
   // Is the outbreak in this country growing or killing itself off?
@@ -345,8 +360,7 @@ const UI = (() => {
       const gs = Game.getState();
       const nowPaused = !gs.paused;
       Game.setPaused(nowPaused);
-      pauseBtn.textContent = nowPaused ? '▶' : '⏸';
-      pauseBtn.classList.toggle('active', nowPaused);
+      setPauseIcon(nowPaused);
       if (typeof AudioEngine !== 'undefined') {
         nowPaused ? AudioEngine.sfxPause() : AudioEngine.sfxUnpause();
       }
@@ -365,20 +379,19 @@ const UI = (() => {
         btn.classList.add('active');
         if (Game.getState().paused) {
           Game.setPaused(false);
-          pauseBtn.textContent = '⏸';
-          pauseBtn.classList.remove('active');
+          setPauseIcon(false);
         }
       };
     });
   }
 
-  function syncPauseButton() {
+  function setPauseIcon(paused) {
     const btn = document.getElementById('btn-pause');
     if (!btn) return;
-    const paused = Game.getState().paused;
-    btn.textContent = paused ? '▶' : '⏸';
+    btn.innerHTML = icon(paused ? 'play' : 'pause');
     btn.classList.toggle('active', paused);
   }
+  function syncPauseButton() { setPauseIcon(Game.getState().paused); }
 
   // ─── EVO AVAILABLE DOT ───────────────────────
   function checkEvoAvailable() {
@@ -401,10 +414,10 @@ const UI = (() => {
     const title = document.getElementById('gameover-title');
     const sub   = document.getElementById('gameover-subtitle');
 
-    icon.textContent = won ? '☣' : '🔬';
+    icon.innerHTML = UI.icon(won ? 'virus' : 'flask');
     icon.className   = 'gameover-icon ' + (won ? 'win' : 'lose');
     const burnout = reason === 'burnout';
-    if (burnout) icon.textContent = '🕯';
+    if (burnout) icon.innerHTML = UI.icon('flame');
     title.textContent = won ? 'HUMANITY FALLS' : burnout ? 'PATHOGEN EXTINCT' : 'CURE DEPLOYED';
     title.className   = won ? 'win-title' : 'lose-title';
     sub.textContent   = won
@@ -586,8 +599,8 @@ const UI = (() => {
 
     const html = sorted.map(c => {
       const infPct = (c.infected / c.pop * 100).toFixed(0);
-      const dead   = c.dead > 0 ? ` ☠${fmt(c.dead)}` : '';
-      const lockIcon = c.collapsed ? ' 🏚' : c.lockdown ? ' 🔒' : c.airportClosed ? ' ✈' : '';
+      const dead   = c.dead > 0 ? `${icon('skull')}${fmt(c.dead)}` : '';
+      const lockIcon = c.collapsed ? icon('skull', 'tc-flag') : c.lockdown ? icon('lock', 'tc-flag') : c.airportClosed ? icon('plane', 'tc-flag') : '';
       return `<button class="top-country-row" data-iso="${c.iso}">
         <span class="tc-name">${c.name}${lockIcon}</span>
         <span class="tc-stats"><span class="tc-inf">${fmt(c.infected)}</span><span class="tc-dead">${dead}</span></span>
@@ -858,7 +871,7 @@ const UI = (() => {
     showCountryPanel, hideCountryPanel, setNewsText,
     initSpeedButtons, checkEvoAvailable, showGameOver,
     startRenderLoop, stopRenderLoop, fmt, pct,
-    flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton,
+    flashScreen, updateTopCountries, resetHud, clearToasts, syncPauseButton, setPauseIcon, icon, buzz,
     updateDock, Records, effectText, resultText, govSummary, trendFor,
   };
 })();

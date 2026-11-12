@@ -372,12 +372,12 @@ const WorldMap = (() => {
 
     // Status
     let statusText, statusClass;
-    if (deadPct > 50)       { statusText = '💀 DEVASTATED'; statusClass = 'rtt-devastated'; }
-    else if (infPct > 30 || deadPct > 10) { statusText = '🔴 CRITICAL';    statusClass = 'rtt-critical'; }
-    else if (infPct > 5)    { statusText = '🟠 SPREADING';  statusClass = 'rtt-spreading'; }
-    else if (infPct > 0)    { statusText = '🟡 EMERGING';   statusClass = 'rtt-emerging'; }
-    else if (country.reached){ statusText = '🟡 EMERGING';   statusClass = 'rtt-emerging'; }
-    else                    { statusText = '🟢 UNINFECTED'; statusClass = 'rtt-clear'; }
+    if (deadPct > 50)       { statusText = 'DEVASTATED'; statusClass = 'rtt-devastated'; }
+    else if (infPct > 30 || deadPct > 10) { statusText = 'CRITICAL';    statusClass = 'rtt-critical'; }
+    else if (infPct > 5)    { statusText = 'SPREADING';  statusClass = 'rtt-spreading'; }
+    else if (infPct > 0)    { statusText = 'EMERGING';   statusClass = 'rtt-emerging'; }
+    else if (country.reached){ statusText = 'EMERGING';   statusClass = 'rtt-emerging'; }
+    else                    { statusText = 'UNINFECTED'; statusClass = 'rtt-clear'; }
 
     // Government response line
     const gov      = UI.govSummary(country);
@@ -386,8 +386,6 @@ const WorldMap = (() => {
     const trend    = UI.trendFor(country);
 
     // Climate/wealth icons
-    const climateIcon = { temperate: '🌤', tropical: '🌴', arid: '☀️', cold: '❄️' }[country.climate] || '🌍';
-    const wealthIcon  = { rich: '💰', middle: '🏙', poor: '🏚' }[country.wealth] || '';
 
     tt.innerHTML = `
       <div class="rtt-header">
@@ -407,9 +405,9 @@ const WorldMap = (() => {
         <div class="rtt-row"><span class="rtt-lbl">Outbreak</span><span class="rtt-val" style="color:${trend.color}">${trend.text}</span></div>
         ` : `<div class="rtt-row"><span class="rtt-lbl">Status</span><span class="rtt-val" style="color:var(--green)">Not yet reached</span></div>`}
         <div class="rtt-divider"></div>
-        <div class="rtt-row"><span class="rtt-lbl">${climateIcon} Climate</span><span class="rtt-val rtt-cap">${country.climate}</span></div>
-        <div class="rtt-row"><span class="rtt-lbl">${wealthIcon} Wealth</span><span class="rtt-val rtt-cap">${country.wealth}</span></div>
-        <div class="rtt-row"><span class="rtt-lbl">🏥 Healthcare</span><span class="rtt-val">${Math.round(country.healthcare * 100)}%</span></div>
+        <div class="rtt-row"><span class="rtt-lbl">Climate</span><span class="rtt-val rtt-cap">${country.climate}</span></div>
+        <div class="rtt-row"><span class="rtt-lbl">Wealth</span><span class="rtt-val rtt-cap">${country.wealth}</span></div>
+        <div class="rtt-row"><span class="rtt-lbl">Healthcare</span><span class="rtt-val">${Math.round(country.healthcare * 100)}%</span></div>
         <div class="rtt-row"><span class="rtt-lbl">Gov. Response</span><span class="rtt-gov">${govParts.join('')}</span></div>
       </div>
       <div class="rtt-hint">Click to inspect</div>
@@ -675,10 +673,10 @@ const WorldMap = (() => {
       .attr('r', 5)
       .attr('stroke', 'rgba(0,0,0,0.4)')
       .attr('stroke-width', 0.5);
-    enter.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .attr('font-size', '5px')
+    enter.append('use')
+      .attr('x', -3.2).attr('y', -3.2).attr('width', 6.4).attr('height', 6.4)
+      .attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 2.2)
+      .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
       .attr('pointer-events', 'none');
 
     enter.transition().duration(400).style('opacity', 1);
@@ -687,7 +685,7 @@ const WorldMap = (() => {
     const all = govIconLayer.selectAll('.gov-icon-group');
     all.select('circle').attr('fill', d =>
       d.collapsed ? 'rgba(72,79,88,0.9)' : d.lockdown ? 'rgba(248,81,73,0.85)' : 'rgba(88,166,255,0.75)');
-    all.select('text').text(d => d.collapsed ? '🏚' : d.lockdown ? '🔒' : d.airportClosed ? '✈' : '⚓');
+    all.select('use').attr('href', d => '#i-' + (d.collapsed ? 'skull' : d.lockdown ? 'lock' : d.airportClosed ? 'plane' : 'anchor'));
 
     // Position all (enter + update)
     govIconLayer.selectAll('.gov-icon-group')
@@ -758,12 +756,11 @@ const WorldMap = (() => {
       .attr('stroke-width', 1)
       .attr('pointer-events', 'none');
 
-    enter.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .attr('font-size', '9px')
-      .attr('pointer-events', 'none')
-      .text('⚡');
+    enter.append('use')
+      .attr('href', '#i-bolt')
+      .attr('x', -5.5).attr('y', -5.5).attr('width', 11).attr('height', 11)
+      .attr('color', '#3fb950')
+      .attr('pointer-events', 'none');
 
     enter.append('text')
       .attr('class', 'bubble-val')
@@ -939,9 +936,77 @@ const WorldMap = (() => {
     if (!dotFrame) dotFrame = requestAnimationFrame(drawDots);
   }
 
-  function drawDots() {
+  // ─── TRANSMISSION ARCS ────────────────────────
+  // Faint pulses travelling between infected countries along the routes
+  // the pathogen can actually use right now: land borders, open airports,
+  // open ports. Decoration, but it tells the truth about what is connected.
+  const ARC_COLORS = { land: '227,179,65', air: '88,166,255', sea: '0,204,180' };
+  let arcs = [], lastArcAt = 0;
+
+  function spawnArc(now) {
+    const hosts = Game.getAllCountries().filter(c => c.infected > 5000 && centroids[c.iso]);
+    if (hosts.length < 2) return;
+    const src = hosts[Math.floor(Math.random() * hosts.length)];
+    const options = [];
+    const sick = iso => { const c = Game.getCountry(iso); return c && c.infected > 0 && centroids[iso] ? c : null; };
+    if (!src.borderClosed || src.collapsed) for (const iso of src.borders) { const c = sick(iso); if (c) options.push([c, 'land']); }
+    if (src.airports > 0 && !src.airportClosed && !src.collapsed) {
+      const c = hosts[Math.floor(Math.random() * hosts.length)];
+      if (c !== src && c.airports > 0 && !c.airportClosed) options.push([c, 'air']);
+    }
+    if (src.ports > 0 && !src.portClosed && !src.collapsed) {
+      const c = hosts[Math.floor(Math.random() * hosts.length)];
+      if (c !== src && c.ports > 0 && !c.portClosed) options.push([c, 'sea']);
+    }
+    if (!options.length) return;
+    const [dst, kind] = options[Math.floor(Math.random() * options.length)];
+    const [x1, y1] = centroids[src.iso], [x2, y2] = centroids[dst.iso];
+    const dist = Math.hypot(x2 - x1, y2 - y1);
+    arcs.push({
+      x1, y1, x2, y2, kind,
+      cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 - (kind === 'land' ? dist * 0.12 : Math.min(dist * 0.35, 90)),
+      start: now, dur: 900 + dist * 9,
+    });
+  }
+
+  function drawArcs(ctx, now, k) {
+    arcs = arcs.filter(a => now - a.start < a.dur);
+    ctx.lineCap = 'round';
+    for (const a of arcs) {
+      const head = (now - a.start) / a.dur, tail = Math.max(0, head - 0.22);
+      const at = t => { const u = 1 - t; return [u * u * a.x1 + 2 * u * t * a.cx + t * t * a.x2, u * u * a.y1 + 2 * u * t * a.cy + t * t * a.y2]; };
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const [x, y] = at(tail + (head - tail) * i / 8);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(${ARC_COLORS[a.kind]},${0.55 * Math.sin(Math.PI * head)})`;
+      ctx.lineWidth = 1.3 / Math.pow(k, 0.8);
+      ctx.stroke();
+    }
+  }
+
+  // While a game is running the layer animates: points shimmer and arcs
+  // travel. Paused, hidden or with reduced motion it only redraws on change.
+  let animTimer = null;
+  function setAnimating(on) {
+    const still = document.body.classList.contains('reduced-motion') ||
+                  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (on && !still && !animTimer) {
+      animTimer = setInterval(() => { if (!document.hidden) scheduleDots(); }, LOW_FX ? 110 : 60);
+    } else if ((!on || still) && animTimer) {
+      clearInterval(animTimer); animTimer = null; arcs = [];
+      scheduleDots();
+    }
+  }
+
+  function drawDots(now) {
     dotFrame = 0;
     if (!dotCtx) return;
+    now = now || performance.now();
+    const gsNow   = Game.getState();
+    const running = !!animTimer && gsNow.phase === 'spreading' && !gsNow.paused;
+    if (running && now - lastArcAt > (LOW_FX ? 900 : 450) && arcs.length < (LOW_FX ? 6 : 14)) { lastArcAt = now; spawnArc(now); }
     const ctx = dotCtx, t = _currentZoom, dpr = ctx.dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, dotCanvas.width, dotCanvas.height);
@@ -949,7 +1014,8 @@ const WorldMap = (() => {
 
     // Points grow a little as you zoom in, but far slower than the map does
     const r = 1.7 * Math.max(0.7, Math.min(1.2, baseScale / 129)) / Math.pow(t.k, 0.72);
-    const live = new Path2D(), glow = new Path2D(), ash = new Path2D();
+    // Three groups of live points pulse out of step with each other
+    const live = [new Path2D(), new Path2D(), new Path2D()], glow = new Path2D(), ash = new Path2D();
     let growing = false;
 
     for (const c of Game.getAllCountries()) {
@@ -968,14 +1034,20 @@ const WorldMap = (() => {
         const [x, y] = dp.pts[i];
         if (i < dead) { ash.moveTo(x + r * 0.8, y); ash.arc(x, y, r * 0.8, 0, 6.2832); }
         else {
-          live.moveTo(x + r, y); live.arc(x, y, r, 0, 6.2832);
+          const bucket = live[i % 3];
+          bucket.moveTo(x + r, y); bucket.arc(x, y, r, 0, 6.2832);
           if (!LOW_FX) { glow.moveTo(x + r * 2.8, y); glow.arc(x, y, r * 2.8, 0, 6.2832); }
         }
       }
     }
     ctx.fillStyle = 'rgba(132,118,112,0.6)'; ctx.fill(ash);
     if (!LOW_FX) { ctx.fillStyle = 'rgba(255,70,40,0.13)'; ctx.fill(glow); }
-    ctx.fillStyle = 'rgba(255,96,64,0.95)'; ctx.fill(live);
+    for (let b = 0; b < 3; b++) {
+      const shimmer = running ? 0.78 + 0.2 * Math.sin(now / 520 + b * 2.1) : 0.95;
+      ctx.fillStyle = `rgba(255,96,64,${shimmer})`;
+      ctx.fill(live[b]);
+    }
+    if (running) drawArcs(ctx, now, t.k);
 
     if (growing) scheduleDots();
   }
@@ -1172,6 +1244,7 @@ const WorldMap = (() => {
       delete _prevFilters[iso];
     }
     updateLabels();
+    arcs = [];
     for (const iso in dotPoints) { dotPoints[iso].shown = 0; orderPoints(+iso, centroids[iso]); }
     scheduleDots();
     svg.interrupt().call(zoomBehavior.transform, d3.zoomIdentity);
@@ -1190,7 +1263,7 @@ const WorldMap = (() => {
 
   return {
     load, updateColors, pulseCountry, highlightCountry,
-    zoomToCountry, resetZoom, resize, reset, updateGovIcons, setEntry,
+    zoomToCountry, resetZoom, resize, reset, updateGovIcons, setEntry, setAnimating,
     focusCountry: iso => { const c = Game.getCountry(iso); if (c) selectCountry(iso, c); },
     setOrigin, colorFor, isReady: () => mapInitialized,
     setPick, showTravelRoute,

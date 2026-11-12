@@ -65,8 +65,7 @@
       document.getElementById('pm-resume')?.addEventListener('click', () => {
         hide();
         Game.setPaused(false);
-        const pb = document.getElementById('btn-pause');
-        if (pb) { pb.textContent = '⏸'; pb.classList.remove('active'); }
+        UI.setPauseIcon(false);
         if (typeof AudioEngine !== 'undefined') AudioEngine.sfxUnpause();
       });
 
@@ -92,11 +91,11 @@
         const ok = Game.saveGame();
         const btn = document.getElementById('pm-save');
         if (ok && btn) {
-          btn.textContent = '✓ SAVED!';
+          btn.innerHTML = UI.icon('check') + ' SAVED';
           btn.style.borderColor = 'var(--green)';
           btn.style.color = 'var(--green)';
           setTimeout(() => {
-            btn.textContent = '💾 SAVE GAME';
+            btn.innerHTML = UI.icon('save') + ' SAVE GAME';
             btn.style.borderColor = '';
             btn.style.color = '';
           }, 2000);
@@ -143,7 +142,8 @@
     const btn = document.getElementById('btn-load-save');
     if (!btn) return;
     if (meta) {
-      btn.textContent = `💾 CONTINUE — ${meta.diseaseName} (Day ${meta.day})`;
+      btn.innerHTML = UI.icon('save');
+      btn.append(` CONTINUE · ${meta.diseaseName}, day ${meta.day}`); // text node: the name is user input
       btn.classList.remove('hidden');
     } else {
       btn.classList.add('hidden');
@@ -164,7 +164,7 @@
     Events.startNewsTicker();
     setSpeedButton(gs.speed);
     Game.setPaused(false);
-    UI.toast(`💾 Loaded: ${gs.diseaseName}, day ${gs.day}`, 'info');
+    UI.toast(`Loaded ${gs.diseaseName}, day ${gs.day}`, 'info');
     if (Game.getDilemma()) showDilemma();
   });
 
@@ -299,6 +299,7 @@ The rest is biology.
     motionCb?.addEventListener('change', () => {
       localStorage.setItem('set_reduced_motion', motionCb.checked ? '1' : '0');
       document.body.classList.toggle('reduced-motion', motionCb.checked);
+      WorldMap.setAnimating(Game.getState().phase === 'spreading');
     });
     tooltipCb?.addEventListener('change', () => {
       localStorage.setItem('set_show_tooltips', tooltipCb.checked ? '1' : '0');
@@ -368,14 +369,12 @@ The rest is biology.
     if (!btn) return;
     const muted = AudioEngine.isMuted();
     btn.classList.toggle('muted', muted);
-    btn.textContent = muted ? '♪̶' : '♪';
   }
 
   document.getElementById('btn-music').addEventListener('click', () => {
     const muted = AudioEngine.toggle();
     const btn = document.getElementById('btn-music');
     btn.classList.toggle('muted', muted);
-    btn.textContent = muted ? '♪̶' : '♪';
   });
 
   document.getElementById('cp-close').addEventListener('click', () => {
@@ -399,8 +398,8 @@ The rest is biology.
       if (navigator.share && window.matchMedia('(pointer: coarse)').matches) { await navigator.share({ text }); done = true; }
       else { await navigator.clipboard.writeText(text); done = true; }
     } catch { /* cancelled, or clipboard blocked */ }
-    btn.textContent = done ? '✓ COPIED' : 'COULD NOT COPY';
-    setTimeout(() => { btn.textContent = '⧉ SHARE RESULT'; }, 2000);
+    btn.innerHTML = done ? UI.icon('check') + ' COPIED' : 'COULD NOT COPY';
+    setTimeout(() => { btn.innerHTML = UI.icon('copy') + ' SHARE RESULT'; }, 2000);
   });
 
   document.getElementById('btn-main-menu').addEventListener('click', () => {
@@ -413,7 +412,6 @@ The rest is biology.
   // ─── DISEASE BRIEFINGS ───────────────────────
   const DISEASE_BRIEFINGS = {
     bacteria: {
-      icon: '🦠',
       codename: 'BACTERIAL STRAIN · BIOHAZARD LEVEL 4',
       text: `A gram-negative bacillus engineered for environmental resilience. It forms biofilms, resists standard antibiotic protocols, and thrives in crowded low-hygiene conditions.
 
@@ -426,7 +424,6 @@ Weakness: rich-nation healthcare systems will contain you aggressively once aler
 Choose your origin wisely. The incubation begins.`,
     },
     virus: {
-      icon: '🔴',
       codename: 'VIRAL STRAIN · BIOHAZARD LEVEL 4',
       text: `A single-stranded RNA virus that was never meant to exist outside a laboratory. It hijacks cellular machinery with terrifying efficiency, replicating exponentially inside every host.
 
@@ -437,7 +434,6 @@ Advantage: highest base transmission rate of any biological strain. One infected
 Warning: immune responses evolve quickly. Governments detect viral threats faster. Your window is narrow — move before they coordinate a response.`,
     },
     fungus: {
-      icon: '🍄',
       codename: 'FUNGAL STRAIN · BIOHAZARD LEVEL 3',
       text: `Not a virus. Not a bacterium. Something older. This organism reproduces via microscopic spores that survive UV radiation, extreme temperatures, and chemical sterilisation.
 
@@ -448,7 +444,6 @@ Advantage: random long-range spore bursts can seed distant continents without ai
 Weakness: wet tropical climates slow sporulation significantly. Expand into arid and cold regions — there you are nearly unstoppable.`,
     },
     parasite: {
-      icon: '🐛',
       codename: 'PARASITIC STRAIN · BIOHAZARD LEVEL 3',
       text: `A multicellular organism designed to live inside a human host indefinitely — and undetected. Governments won't begin cure research until visible severity threshold is crossed.
 
@@ -459,7 +454,6 @@ Optimal strategy: evolve transmission silently before investing in severity. Low
 Disadvantage: inherently slower spread than viral strains. But the world won't see you coming.`,
     },
     prion: {
-      icon: '🧠',
       codename: 'PRION STRAIN · BIOHAZARD LEVEL 4',
       text: `Not a living organism. A misfolded protein that cannot be destroyed by heat, radiation, or conventional biohazard protocols. Once it enters the nervous system, there is no cure — only progression.
 
@@ -470,7 +464,6 @@ Advantage: near-zero initial detection. Extremely high resistance to cure resear
 Disadvantage: transmission is the slowest of all strains. Every host must count. Infect dense, connected populations and let biology do the rest. Time is your greatest weapon.`,
     },
     'nano-virus': {
-      icon: '⚙️',
       codename: 'SYNTHETIC STRAIN · BIOHAZARD LEVEL 5',
       text: `This is not natural. This is manufactured. A self-replicating synthetic pathogen from a covert laboratory program that officially does not exist. You are the only person alive who knows what has been released.
 
@@ -491,11 +484,11 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       overlay.id = 'briefing-overlay';
       overlay.innerHTML = `
         <div class="briefing-inner">
-          <div class="briefing-icon">${b.icon}</div>
+          <div class="briefing-icon"><svg class="ic" aria-hidden="true"><use href="#t-${DISEASE_BRIEFINGS[type] ? type : 'bacteria'}"/></svg></div>
           <div class="briefing-code">${b.codename}</div>
           <pre class="briefing-text" id="briefing-text"></pre>
           <button class="briefing-skip" id="briefing-skip">skip ›</button>
-          <button class="btn-primary briefing-go hidden" id="briefing-go">⚡ DEPLOY PATHOGEN</button>
+          <button class="btn-primary briefing-go hidden" id="briefing-go">DEPLOY PATHOGEN</button>
         </div>
       `;
       document.getElementById('screen-game').appendChild(overlay);
@@ -535,8 +528,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
   function setSpeedButton(speed) {
     document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.remove('active'));
     document.getElementById('btn-speed' + (speed || 1))?.classList.add('active');
-    const pauseBtn = document.getElementById('btn-pause');
-    if (pauseBtn) { pauseBtn.textContent = '⏸'; pauseBtn.classList.remove('active'); }
+    UI.setPauseIcon(false);
   }
 
   async function enterGameScreen() {
@@ -557,6 +549,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
       WorldMap.reset();
     }
     WorldMap.updateColors();
+    WorldMap.setAnimating(true);
   }
 
   // ─── INIT NEW GAME ────────────────────────────
@@ -685,11 +678,11 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     originOverlay.innerHTML = `
       <div class="origin-pulse-ring"></div>
       <div class="origin-inner">
-        <div class="origin-icon">☣</div>
+        <div class="origin-icon">${UI.icon('virus')}</div>
         <h3>SELECT ORIGIN</h3>
         <p>Tap a country to place Patient Zero</p>
         <div class="origin-btns">
-          <button id="btn-origin-list" class="origin-back-btn">☰ COUNTRY LIST</button>
+          <button id="btn-origin-list" class="origin-back-btn">${UI.icon('list')} COUNTRY LIST</button>
           <button id="btn-origin-back" class="origin-back-btn">← BACK</button>
         </div>
       </div>
@@ -771,8 +764,8 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         ${country.climate} &nbsp;•&nbsp; ${country.wealth}
       </div>
       <div class="cc-btns">
-        <button class="cc-yes" id="cc-yes">✓ CONFIRM</button>
-        <button class="cc-no"  id="cc-no">✕ CANCEL</button>
+        <button class="cc-yes" id="cc-yes">CONFIRM</button>
+        <button class="cc-no"  id="cc-no">CANCEL</button>
       </div>
     `;
     document.getElementById('screen-game').appendChild(confirmEl);
@@ -824,6 +817,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         if (d.amount >= 2) AudioEngine.sfxDNA();
         break;
       case 'country':
+        UI.buzz(8);
         AudioEngine.sfxNewCountry();
         WorldMap.pulseCountry(d.iso);
         WorldMap.setEntry(d.iso, d.srcIso, d.method);
@@ -850,6 +844,7 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         UI.updateDock();
         break;
       case 'dilemma':
+        UI.buzz(25);
         showDilemma();
         break;
       case 'ops':
@@ -865,6 +860,8 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
         break;
       case 'end':
         closeDilemma();
+        WorldMap.setAnimating(false);
+        UI.buzz([40, 60, 40]);
         d.won ? AudioEngine.sfxWin() : AudioEngine.sfxLose();
         Events.cleanup();
         NewsPopup.reset();
@@ -960,65 +957,122 @@ The cure clock is already running. Do not hesitate. Do not pause. The only way t
     }
   });
 
-  // ─── SPLASH PARTICLES ─────────────────────────
-  // floating cell-like particles on the splash screen
-  (function initSplashParticles() {
+  // ─── TITLE SCREEN: AN INFECTED WORLD ──────────
+  // The background is a dot-matrix world map that an outbreak sweeps
+  // across every half minute, starting somewhere new each time.
+  (function initSplashWorld() {
     const canvas = document.getElementById('splash-canvas');
-    if (!canvas) return;
-    const ctx2 = canvas.getContext('2d');
-    const particles = [];
-    const N = 28;
+    const splash = document.getElementById('screen-splash');
+    if (!canvas || typeof d3 === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+    const CYCLE = 30, FADE = 4;       // seconds
+    let land = null, dots = [], raf = 0, W = 0, H = 0, step = 9, cycleStart = 0;
 
-    function resize() {
-      canvas.width  = canvas.offsetWidth  || window.innerWidth;
-      canvas.height = canvas.offsetHeight || window.innerHeight;
-    }
-    resize();
-    window.addEventListener('resize', resize);
+    const still = () => document.body.classList.contains('reduced-motion') ||
+                        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    for (let i = 0; i < N; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        r: 2 + Math.random() * 6,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: -0.1 - Math.random() * 0.3,
-        opacity: 0.1 + Math.random() * 0.25,
-        pulse: Math.random() * Math.PI * 2,
-      });
-    }
+    function build() {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = canvas.clientWidth; H = canvas.clientHeight;
+      if (!W || !H) return;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!land) return;
 
-    let splashRaf;
-    function drawParticles() {
-      const w = canvas.width, h = canvas.height;
-      ctx2.clearRect(0, 0, w, h);
-      const now = Date.now() * 0.001;
-      for (const p of particles) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.y < -20) { p.y = h + 10; p.x = Math.random() * w; }
-        if (p.x < -20) p.x = w + 10;
-        if (p.x > w + 20) p.x = -10;
-        const alpha = p.opacity * (0.7 + 0.3 * Math.sin(now * 1.5 + p.pulse));
-        ctx2.beginPath();
-        ctx2.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx2.fillStyle = `rgba(248,81,73,${alpha})`;
-        ctx2.fill();
-        // draw a tiny ring around each particle
-        ctx2.beginPath();
-        ctx2.arc(p.x, p.y, p.r * 2.2, 0, Math.PI * 2);
-        ctx2.strokeStyle = `rgba(248,81,73,${alpha * 0.3})`;
-        ctx2.lineWidth = 0.5;
-        ctx2.stroke();
+      // Big enough to fill the screen either way up; centred on Africa and
+      // Eurasia so a portrait crop still shows most of the world's people.
+      const proj = d3.geoNaturalEarth1()
+        .rotate([-25, 0])
+        .scale(Math.max(W / 5.4, H / 3.1))
+        .translate([W / 2, H * 0.5]);
+      const shape = new Path2D(d3.geoPath(proj)(land));
+      const probe = document.createElement('canvas').getContext('2d');
+
+      step = Math.max(7, Math.min(12, Math.sqrt(W * H) / 90));
+      dots = [];
+      for (let row = 0, y = step / 2; y < H; y += step * 0.87, row++) {
+        for (let x = (row % 2 ? step : step / 2); x < W; x += step) {
+          if (probe.isPointInPath(shape, x, y)) dots.push({ x, y, at: 0 });
+        }
       }
-      splashRaf = requestAnimationFrame(drawParticles);
+      startOutbreak(performance.now());
     }
-    drawParticles();
 
-    // Stop when leaving splash
-    document.getElementById('btn-start').addEventListener('click', () => {
-      cancelAnimationFrame(splashRaf);
-    }, { once: true });
+    // Each dot gets the moment the wave reaches it: distance from the
+    // nearest origin, plus some noise so the front is ragged.
+    function startOutbreak(now) {
+      cycleStart = now;
+      if (!dots.length) return;
+      const origins = [0, 1, 2].map(i => ({
+        ...dots[Math.floor(Math.random() * dots.length)],
+        delay: i * (3 + Math.random() * 4),
+      }));
+      const speed = Math.hypot(W, H) / (CYCLE - FADE - 9); // px per second
+      for (const d of dots) {
+        let at = Infinity;
+        for (const o of origins) at = Math.min(at, o.delay + Math.hypot(d.x - o.x, d.y - o.y) / speed);
+        d.at = at + Math.random() * 1.6;
+      }
+    }
+
+    function draw(now) {
+      let t = (now - cycleStart) / 1000;
+      if (t > CYCLE) { startOutbreak(now); t = 0; }
+      if (still()) t = CYCLE * 0.45; // a single frame, mid-outbreak
+
+      // The whole outbreak fades out before the next one begins
+      const fade = t > CYCLE - FADE ? 1 - (t - (CYCLE - FADE)) / FADE : 1;
+      const calm = new Path2D(), sick = new Path2D(), front = new Path2D();
+      const r = step * 0.16;
+      for (const d of dots) {
+        const age = t - d.at;
+        const p = age < 0 ? calm : age < 1.2 ? front : sick;
+        const rr = p === front ? r * 1.9 : p === sick ? r * 1.15 : r;
+        p.moveTo(d.x + rr, d.y); p.arc(d.x, d.y, rr, 0, 6.2832);
+      }
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(126,146,176,0.22)'; ctx.fill(calm);
+      ctx.fillStyle = `rgba(226,74,56,${0.22 + 0.5 * fade})`; ctx.fill(sick);
+      ctx.fillStyle = `rgba(255,170,120,${0.3 + 0.7 * fade})`; ctx.fill(front);
+    }
+
+    function loop(now) {
+      raf = 0;
+      if (!splash.classList.contains('active')) return; // stop when the game starts
+      draw(now);
+      if (!still()) raf = requestAnimationFrame(loop);
+    }
+    const wake = () => { if (!raf && splash.classList.contains('active')) raf = requestAnimationFrame(loop); };
+
+    // The same file the game map uses, so this also warms the cache.
+    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
+      .then(world => { land = topojson.feature(world, world.objects.land); build(); wake(); })
+      .catch(() => { /* offline: the title screen just has no map */ });
+
+    window.addEventListener('resize', () => { clearTimeout(build.t); build.t = setTimeout(() => { build(); wake(); }, 150); });
+    new MutationObserver(wake).observe(splash, { attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(wake).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   })();
 
-  console.log('%c☣ PATHOGEN v3 READY ☣', 'color:#00ff41;font-size:18px;font-weight:900;text-shadow:0 0 10px #00ff41');
+  // ─── PATHOGEN CARDS: WHAT EACH TYPE IS GOOD AT ─
+  // Bars are derived from the same numbers the engine uses.
+  (function addTypeStats() {
+    const clamp01 = v => Math.max(0.04, Math.min(1, v));
+    document.querySelectorAll('.type-card').forEach(card => {
+      const td = DISEASE_TYPES[card.dataset.type];
+      if (!td) return;
+      const stats = [
+        ['Spread',  clamp01((td.infectivityMod - 0.5) / 1.1)],
+        ['Stealth', td.instantCure ? 0.04 : clamp01((td.stealthy ? 0.75 : 0.45) + (1 - td.severityMod) * 0.3)],
+        ['Cure resistance', clamp01(1.2 - td.cureMod * 0.7)],
+      ];
+      const box = document.createElement('div');
+      box.className = 'type-stats';
+      box.innerHTML = stats.map(([label, v]) =>
+        `<div class="ts-row"><span>${label}</span><div class="ts-bar"><i style="width:${Math.round(v * 100)}%"></i></div></div>`).join('');
+      card.appendChild(box);
+    });
+  })();
+
+  console.log('%cPATHOGEN v3', 'color:#00ff41;font-size:18px;font-weight:900;text-shadow:0 0 10px #00ff41');
 })();

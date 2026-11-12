@@ -13,15 +13,57 @@
   <title>PATHOGEN — Global Pandemic Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body>
+
+  <!-- ICONS: one stroke-drawn set used everywhere instead of emoji -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7c0 2.4 1.2 4.4 3 5.7V19h8v-3.3c1.8-1.3 3-3.3 3-5.7a7 7 0 0 0-7-7z"/><circle cx="9.3" cy="10.5" r="1.3"/><circle cx="14.7" cy="10.5" r="1.3"/><path d="M10 19v2M14 19v2"/></symbol>
+      <symbol id="i-virus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M18.4 5.6l-3.2 3.2M8.8 15.2l-3.2 3.2"/></symbol>
+      <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></symbol>
+      <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3"/><path d="M7.5 15h9"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+      <symbol id="i-helix" viewBox="0 0 24 24"><path d="M7 3c0 5 10 5 10 9s-10 4-10 9"/><path d="M17 3c0 5-10 5-10 9s10 4 10 9"/><path d="M8.5 6.5h7M8.5 17.5h7"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 5 13.5h6L10 22l9-12h-6z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+      <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v5h5"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7M12 17v.01"/></symbol>
+      <symbol id="i-signal" viewBox="0 0 24 24"><path d="M12 20v-8"/><circle cx="12" cy="9.5" r="1.5"/><path d="M8 13.5a5.5 5.5 0 0 1 0-8M16 5.5a5.5 5.5 0 0 1 0 8M5 16.5a9.5 9.5 0 0 1 0-14M19 2.5a9.5 9.5 0 0 1 0 14"/></symbol>
+      <symbol id="i-thermo" viewBox="0 0 24 24"><path d="M10 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0z"/><path d="M12 9v7"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+      <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="M10 13 21 3"/></symbol>
+      <symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14M5 13a7 7 0 0 0 14 0M8 11h8"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.500 5 10a5 5 0 0 1-10 0c0-2 1-3.500 2-4.500.3 1.500 1 2.300 2 2.500-.5-3 .2-5.500 1-8z"/></symbol>
+      <!-- pathogen types -->
+      <symbol id="t-bacteria" viewBox="0 0 24 24"><rect x="4.500" y="8.500" width="15" height="7" rx="3.500" transform="rotate(-30 12 12)"/><path d="M5.200 16.800c-1.600.4-2.300 1.800-1.400 3.400M18.800 7.200c1.600-.4 2.300-1.800 1.400-3.400"/><path d="M9.500 13.200v.01M12 12v.01M14.500 10.800v.01"/></symbol>
+      <symbol id="t-virus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.500"/><path d="M12 3v4.500M12 16.500V21M3 12h4.500M16.500 12H21M5.600 5.600l3.200 3.200M15.200 15.200l3.200 3.200M18.400 5.600l-3.200 3.200M8.800 15.200l-3.200 3.200"/></symbol>
+      <symbol id="t-fungus" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0z"/><path d="M10 12v6a2 2 0 0 0 4 0v-6"/><path d="M9 8v.01M14 6.500v.01M16 9.500v.01"/></symbol>
+      <symbol id="t-parasite" viewBox="0 0 24 24"><path d="M4 19c3.500 0 3-4.500 6.500-4.500S13.500 10 17 10s2.500-3 3-5"/><circle cx="20.200" cy="4.300" r="1"/></symbol>
+      <symbol id="t-prion" viewBox="0 0 24 24"><path d="M5 5h7l-5 4.500h10l-6 4.500h8l-6 5"/></symbol>
+      <symbol id="t-nano-virus" viewBox="0 0 24 24"><path d="M12 3l7.800 4.500v9L12 21l-7.800-4.500v-9z"/><circle cx="12" cy="12" r="2.500"/><path d="M12 3v6.500M4.200 16.500l5.600-3.200M19.800 16.500l-5.600-3.200"/></symbol>
+    </defs>
+  </svg>
 
   <!-- MAP LOADING OVERLAY -->
   <div id="map-loader" class="map-loader hidden">
     <div class="loader-inner">
-      <div class="loader-biohazard">☣</div>
+      <div class="loader-biohazard"><svg class="ic" aria-hidden="true"><use href="#i-virus"/></svg></div>
       <div class="loader-text">LOADING WORLD DATA...</div>
       <div class="loader-bar"><div class="loader-fill"></div></div>
     </div>
@@ -33,7 +75,6 @@
   <!-- ═══════════════════════════════════════ SPLASH -->
   <div id="screen-splash" class="screen active">
     <div class="splash-bg"></div>
-    <div class="biohazard-bg">☣</div>
     <canvas id="splash-canvas" class="splash-canvas"></canvas>
     <div class="splash-content">
       <h1 class="game-title">PATHOGEN</h1>
@@ -42,15 +83,15 @@
         <div class="stat-pill">7.7B lives at stake</div>
         <div class="stat-pill" id="pill-version">v3.0</div>
       </div>
-      <button class="btn-primary pulse-btn" id="btn-start">☣ INITIATE OUTBREAK</button>
-      <button class="btn-secondary btn-load-save hidden" id="btn-load-save">💾 CONTINUE SAVED GAME</button>
+      <button class="btn-primary pulse-btn" id="btn-start">INITIATE OUTBREAK</button>
+      <button class="btn-secondary btn-load-save hidden" id="btn-load-save"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg> CONTINUE</button>
       <button class="btn-secondary btn-daily" id="btn-daily">
-        <span class="daily-title">📅 DAILY OUTBREAK</span>
+        <span class="daily-title"><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg> DAILY OUTBREAK</span>
         <span class="daily-sub" id="daily-sub"></span>
       </button>
       <div class="splash-secondary-btns">
-        <button class="btn-secondary" id="btn-how-to-play">HOW TO PLAY</button>
-        <button class="btn-secondary" id="btn-settings">⚙ SETTINGS</button>
+        <button class="btn-secondary" id="btn-how-to-play"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg> HOW TO PLAY</button>
+        <button class="btn-secondary" id="btn-settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg> SETTINGS</button>
       </div>
     </div>
     <div class="splash-ticker-bar">
@@ -64,54 +105,54 @@
   <!-- ═══════════════════════════════════════ HOW TO PLAY -->
   <div id="modal-howto" class="modal hidden">
     <div class="modal-content howto-modal">
-      <h2>⚠ HOW TO PLAY</h2>
+      <h2>HOW TO PLAY</h2>
       <div class="howto-grid">
         <div class="howto-section">
-          <h3>☣ OBJECTIVE</h3>
+          <h3>OBJECTIVE</h3>
           <p>Infect every country, then wipe out humanity before a cure is finished. You lose if the cure is deployed, or if your pathogen kills its last host while anyone is still uninfected.</p>
         </div>
         <div class="howto-section">
-          <h3>⚡ DNA POINTS</h3>
+          <h3>DNA POINTS</h3>
           <p>Earn DNA as the outbreak grows, reaches new countries, and from bubbles on the map. Spend it in EVOLVE. Devolving refunds half; random mutations are free and can be devolved.</p>
         </div>
         <div class="howto-section">
-          <h3>🧬 EVOLUTION STRATEGY</h3>
+          <h3>EVOLUTION STRATEGY</h3>
           <p><strong style="color:#ff8c00">1.</strong> Transmissions decide <em>how</em> you travel: by plane, ship or over land.<br>
              <strong style="color:#ff8c00">2.</strong> Keep symptoms low until you are everywhere.<br>
              <strong style="color:#ff8c00">3.</strong> Then turn lethal. Too early and it burns itself out.</p>
         </div>
         <div class="howto-section">
-          <h3>🌡 CLIMATE &amp; WEALTH</h3>
+          <h3>CLIMATE &amp; WEALTH</h3>
           <p>Cold and arid countries resist you until you adapt. Poor countries spread fast; rich ones spread slowly, fund the cure, and close their airports first.</p>
         </div>
         <div class="howto-section">
-          <h3>🔬 DETECTION &amp; CURE</h3>
+          <h3>DETECTION &amp; CURE</h3>
           <p>Visible symptoms and deaths fill the detection meter. Once identified, research begins and governments start closing routes. Dead and sick researchers cure nothing.</p>
         </div>
         <div class="howto-section">
-          <h3>⚖ DECISIONS</h3>
+          <h3>DECISIONS</h3>
           <p>Every month or two the game stops and puts a choice to you. Both options cost something: DNA, attention, or control over what your pathogen becomes.</p>
         </div>
         <div class="howto-section">
-          <h3>🎯 OPERATIONS</h3>
+          <h3>OPERATIONS</h3>
           <p>The OPS tab in EVOLVE has one-off actions: smuggle the pathogen into sealed countries, go dormant to hide, stage superspreader events, or stall the cure with disinformation.</p>
         </div>
         <div class="howto-section">
-          <h3>🗺 MAP</h3>
+          <h3>MAP</h3>
           <p>Orange to red shows infection, near-black shows mass death. Tap a country to see whether the outbreak there is growing or burning out.</p>
         </div>
       </div>
-      <button class="btn-primary" id="btn-close-howto">✓ UNDERSTOOD</button>
+      <button class="btn-primary" id="btn-close-howto">UNDERSTOOD</button>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════ SETTINGS MODAL -->
   <div id="modal-settings" class="modal hidden">
     <div class="modal-content settings-modal">
-      <h2>⚙ SETTINGS</h2>
+      <h2>SETTINGS</h2>
 
       <div class="settings-section">
-        <div class="settings-section-title">🎵 AUDIO</div>
+        <div class="settings-section-title">AUDIO</div>
         <div class="settings-row">
           <span class="settings-label">Music Volume</span>
           <div class="settings-control">
@@ -129,7 +170,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">🖥 DISPLAY</div>
+        <div class="settings-section-title">DISPLAY</div>
         <div class="settings-row">
           <span class="settings-label">Reduced Motion</span>
           <label class="toggle-switch">
@@ -147,7 +188,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">ℹ ABOUT</div>
+        <div class="settings-section-title">ABOUT</div>
         <div class="settings-about">
           <span class="settings-about-line">PATHOGEN v3.0 · Global Pandemic Simulator</span>
           <span class="settings-about-line">A strategy game built on a stochastic epidemic model</span>
@@ -155,7 +196,7 @@
         </div>
       </div>
 
-      <button class="btn-primary" id="btn-close-settings">✓ SAVE &amp; CLOSE</button>
+      <button class="btn-primary" id="btn-close-settings">DONE</button>
     </div>
   </div>
 
@@ -163,7 +204,7 @@
   <div id="screen-story" class="screen">
     <div class="story-wrap">
       <div class="story-header">
-        <span class="classified-stamp">⚠ CLASSIFIED</span>
+        <span class="classified-stamp">CLASSIFIED</span>
         <span class="story-clearance">EYES ONLY — SECTOR SEVEN CLEARANCE</span>
       </div>
       <div class="story-body" id="story-body"></div>
@@ -177,7 +218,7 @@
   <!-- ═══════════════════════════════════════ SETUP -->
   <div id="screen-setup" class="screen">
     <div class="setup-content">
-      <h2 class="setup-title">☣ CREATE PATHOGEN</h2>
+      <h2 class="setup-title">CREATE PATHOGEN</h2>
 
       <div class="form-group">
         <label>PATHOGEN NAME</label>
@@ -189,32 +230,32 @@
         <label>PATHOGEN TYPE</label>
         <div class="type-grid">
           <div class="type-card selected" data-type="bacteria">
-            <span class="type-icon">🦠</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-bacteria"/></svg></span>
             <span class="type-name">BACTERIA</span>
             <span class="type-desc">Balanced. Best for beginners. Full evolution tree available.</span>
           </div>
           <div class="type-card" data-type="virus">
-            <span class="type-icon">🔴</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-virus"/></svg></span>
             <span class="type-name">VIRUS</span>
             <span class="type-desc">Mutates new symptoms for free, wanted or not. Fast spread.</span>
           </div>
           <div class="type-card" data-type="fungus">
-            <span class="type-icon">🍄</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-fungus"/></svg></span>
             <span class="type-name">FUNGUS</span>
             <span class="type-desc">Slow, but spore bursts cross closed borders.</span>
           </div>
           <div class="type-card" data-type="parasite">
-            <span class="type-icon">🐛</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-parasite"/></svg></span>
             <span class="type-name">PARASITE</span>
             <span class="type-desc">Hard to detect and slow to cure. Earns less DNA.</span>
           </div>
           <div class="type-card" data-type="prion">
-            <span class="type-icon">🧠</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-prion"/></svg></span>
             <span class="type-name">PRION</span>
             <span class="type-desc">Nearly invisible and very hard to cure. Extremely slow.</span>
           </div>
           <div class="type-card" data-type="nano-virus">
-            <span class="type-icon">⚙️</span>
+            <span class="type-icon"><svg class="ic" aria-hidden="true"><use href="#t-nano-virus"/></svg></span>
             <span class="type-name">SYNTHETIC</span>
             <span class="type-desc">Lab-made. Detected on day one, but spreads very fast.</span>
           </div>
@@ -242,7 +283,7 @@
     <!-- TOP HUD -->
     <div class="hud-top">
       <div class="hud-stat dead-stat">
-        <span class="hud-icon">☠</span>
+        <span class="hud-icon"><svg class="ic" aria-hidden="true"><use href="#i-skull"/></svg></span>
         <div class="hud-values">
           <span class="hud-label">DEAD</span>
           <span class="hud-number" id="hud-dead">0</span>
@@ -250,7 +291,7 @@
         </div>
       </div>
       <div class="hud-stat infected-stat">
-        <span class="hud-icon">🦠</span>
+        <span class="hud-icon"><svg class="ic" aria-hidden="true"><use href="#i-virus"/></svg></span>
         <div class="hud-values">
           <span class="hud-label">INFECTED</span>
           <span class="hud-number" id="hud-infected">0</span>
@@ -258,21 +299,21 @@
         </div>
       </div>
       <div class="hud-stat healthy-stat">
-        <span class="hud-icon">👤</span>
+        <span class="hud-icon"><svg class="ic" aria-hidden="true"><use href="#i-person"/></svg></span>
         <div class="hud-values">
           <span class="hud-label">HEALTHY</span>
           <span class="hud-number" id="hud-healthy">7.71B</span>
         </div>
       </div>
       <div class="hud-stat cure-stat">
-        <span class="hud-icon">🔬</span>
+        <span class="hud-icon"><svg class="ic" aria-hidden="true"><use href="#i-flask"/></svg></span>
         <div class="hud-values">
           <span class="hud-label">CURE</span>
           <span class="hud-number" id="hud-cure">0%</span>
           <span class="hud-rate" id="hud-cure-rate"></span>
         </div>
       </div>
-      <button class="music-btn" id="btn-music" title="Toggle music">♪</button>
+      <button class="music-btn" id="btn-music" title="Toggle music" aria-label="Toggle music"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg></button>
     </div>
 
     <!-- CURE PROGRESS BAR -->
@@ -307,7 +348,7 @@
       <div class="pm-card" id="pm-card">
         <div class="pm-scanlines"></div>
         <div class="pm-header">
-          <div class="pm-paused-label">⏸ PAUSED</div>
+          <div class="pm-paused-label">PAUSED</div>
           <div class="pm-disease-name" id="pm-disease-name">PATHOGEN</div>
           <div class="pm-disease-type" id="pm-disease-type">BACTERIAL STRAIN</div>
         </div>
@@ -332,21 +373,21 @@
         <div class="pm-section-title">SETTINGS</div>
         <div class="pm-settings">
           <div class="pm-setting-row">
-            <span class="pm-setting-label">🎵 Music</span>
+            <span class="pm-setting-label">Music</span>
             <input type="range" id="pm-music-vol" class="pm-slider" min="0" max="100" value="55">
             <span class="pm-setting-val" id="pm-music-val">55</span>
           </div>
           <div class="pm-setting-row">
-            <span class="pm-setting-label">🔊 SFX</span>
+            <span class="pm-setting-label">Effects</span>
             <input type="range" id="pm-sfx-vol" class="pm-slider" min="0" max="100" value="90">
             <span class="pm-setting-val" id="pm-sfx-val">90</span>
           </div>
         </div>
         <div class="pm-buttons">
-          <button class="pm-btn pm-btn-primary" id="pm-resume">▶ RESUME</button>
-          <button class="pm-btn pm-btn-save" id="pm-save">💾 SAVE GAME</button>
-          <button class="pm-btn pm-btn-secondary" id="pm-restart">↺ RESTART</button>
-          <button class="pm-btn pm-btn-danger" id="pm-main-menu">⌂ MAIN MENU</button>
+          <button class="pm-btn pm-btn-primary" id="pm-resume"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg> RESUME</button>
+          <button class="pm-btn pm-btn-save" id="pm-save"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg> SAVE GAME</button>
+          <button class="pm-btn pm-btn-secondary" id="pm-restart"><svg class="ic" aria-hidden="true"><use href="#i-restart"/></svg> RESTART</button>
+          <button class="pm-btn pm-btn-danger" id="pm-main-menu"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg> MAIN MENU</button>
         </div>
         <div class="pm-footer">SPACE · ESC to resume</div>
       </div>
@@ -386,7 +427,7 @@
       <div class="cp-header">
         <span id="cp-flag"></span>
         <span id="cp-name">Country</span>
-        <button id="cp-close">✕</button>
+        <button id="cp-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="cp-bars">
         <div class="cp-bar-row">
@@ -419,28 +460,28 @@
 
     <!-- COUNTRIES INFECTED BADGE -->
     <div class="countries-badge" id="countries-badge">
-      <span class="live-dot"></span> 🌍 <span id="hud-countries">0</span> / <span id="hud-countries-total">118</span>
+      <span class="live-dot"></span><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg> <span id="hud-countries">0</span> / <span id="hud-countries-total">118</span>
     </div>
 
     <!-- DAY COUNTER -->
     <div class="day-counter">DAY <span id="hud-day">0</span></div>
-    <button class="map-reset-btn" id="btn-map-reset" title="Show the whole map" aria-label="Show the whole map">⤢</button>
+    <button class="map-reset-btn" id="btn-map-reset" title="Show the whole map" aria-label="Show the whole map"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
 
     <!-- BOTTOM HUD -->
     <div class="hud-bottom">
       <div class="dna-display" id="dna-display">
-        <span class="dna-icon">⚡</span>
+        <span class="dna-icon"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg></span>
         <span id="hud-dna">0</span>
         <span class="dna-label">DNA</span>
       </div>
 
       <button class="btn-evolve" id="btn-evolve">
-        🧬 EVOLVE
+        <svg class="ic" aria-hidden="true"><use href="#i-helix"/></svg> EVOLVE
         <span class="evo-dot hidden" id="evo-available-dot"></span>
       </button>
 
       <div class="speed-controls">
-        <button class="speed-btn" id="btn-pause" title="Pause/Resume">⏸</button>
+        <button class="speed-btn" id="btn-pause" title="Pause/Resume" aria-label="Pause or resume"><svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg></button>
         <button class="speed-btn active" id="btn-speed1" data-speed="1">1×</button>
         <button class="speed-btn" id="btn-speed2" data-speed="2">2×</button>
         <button class="speed-btn" id="btn-speed3" data-speed="3">3×</button>
@@ -481,7 +522,7 @@
     <div class="modal-content countries-modal">
       <div class="countries-head">
         <h2>CHOOSE ORIGIN</h2>
-        <button id="btn-close-countries" class="evo-close" aria-label="Close">✕</button>
+        <button id="btn-close-countries" class="evo-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <input type="search" id="country-search" placeholder="Search countries..." autocomplete="off" spellcheck="false">
       <div id="country-list" class="country-list"></div>
@@ -515,15 +556,15 @@
     <div class="modal-content evo-modal">
       <div class="evo-header">
         <div class="evo-title-block">
-          <h2>🧬 EVOLUTION</h2>
+          <h2><svg class="ic" aria-hidden="true"><use href="#i-helix"/></svg> EVOLUTION</h2>
           <span class="evo-disease-name" id="evo-disease-name"></span>
         </div>
         <div class="evo-dna-block">
-          <span class="evo-dna-icon">⚡</span>
+          <span class="evo-dna-icon"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg></span>
           <span id="evo-dna-count">0</span>
           <span class="evo-dna-label">DNA</span>
         </div>
-        <button id="btn-close-evo" class="evo-close">✕</button>
+        <button id="btn-close-evo" class="evo-close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- Disease stat bars -->
@@ -551,10 +592,10 @@
       </div>
 
       <div class="evo-tabs">
-        <button class="evo-tab active" data-tab="transmissions">📡 TRANSMISSION</button>
-        <button class="evo-tab" data-tab="symptoms">🤒 SYMPTOMS</button>
-        <button class="evo-tab" data-tab="abilities">🛡 ABILITIES</button>
-        <button class="evo-tab" data-tab="operations">🎯 OPS</button>
+        <button class="evo-tab active" data-tab="transmissions"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> TRANSMISSION</button>
+        <button class="evo-tab" data-tab="symptoms"><svg class="ic" aria-hidden="true"><use href="#i-thermo"/></svg> SYMPTOMS</button>
+        <button class="evo-tab" data-tab="abilities"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg> ABILITIES</button>
+        <button class="evo-tab" data-tab="operations"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg> OPS</button>
       </div>
 
       <div id="evo-tab-transmissions" class="evo-tab-content active">
@@ -576,7 +617,7 @@
   <!-- ═══════════════════════════════════════ GAME OVER -->
   <div id="screen-gameover" class="screen">
     <div class="gameover-content">
-      <div class="gameover-icon" id="gameover-icon">☣</div>
+      <div class="gameover-icon" id="gameover-icon"><svg class="ic" aria-hidden="true"><use href="#i-virus"/></svg></div>
       <h2 id="gameover-title">HUMANITY FALLS</h2>
       <p id="gameover-subtitle">Your pathogen has claimed all life on Earth</p>
 
@@ -604,8 +645,8 @@
         <div class="score-grade" id="gameover-grade"></div>
       </div>
 
-      <button class="btn-primary" id="btn-play-again">↺ PLAY AGAIN</button>
-      <button class="btn-secondary" id="btn-share">⧉ SHARE RESULT</button>
+      <button class="btn-primary" id="btn-play-again"><svg class="ic" aria-hidden="true"><use href="#i-restart"/></svg> PLAY AGAIN</button>
+      <button class="btn-secondary" id="btn-share"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg> SHARE RESULT</button>
       <button class="btn-secondary" id="btn-main-menu">MAIN MENU</button>
     </div>
   </div>
@@ -619,14 +660,14 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
   <!-- GAME SCRIPTS (order matters) -->
-  <script src="js/data.js?v=11"></script>
-  <script src="js/game.js?v=11"></script>
-  <script src="js/map.js?v=11"></script>
-  <script src="js/evolution.js?v=11"></script>
-  <script src="js/ui.js?v=11"></script>
-  <script src="js/events.js?v=11"></script>
-  <script src="js/audio.js?v=11"></script>
-  <script src="js/news-popup.js?v=11"></script>
-  <script src="js/main.js?v=11"></script>
+  <script src="js/data.js?v=12"></script>
+  <script src="js/game.js?v=12"></script>
+  <script src="js/map.js?v=12"></script>
+  <script src="js/evolution.js?v=12"></script>
+  <script src="js/ui.js?v=12"></script>
+  <script src="js/events.js?v=12"></script>
+  <script src="js/audio.js?v=12"></script>
+  <script src="js/news-popup.js?v=12"></script>
+  <script src="js/main.js?v=12"></script>
 </body>
 </html>

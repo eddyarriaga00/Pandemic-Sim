@@ -35,7 +35,7 @@ const COUNTRIES_DATA = [
 
   // ─── EUROPE
   { iso: 826, name: 'UK',             pop: 68000000,  climate: 'temperate', wealth: 'rich',   airports: 5, ports: 3, borders: [372],         healthcare: 0.90 },
-  { iso: 250, name: 'France',         pop: 68000000,  climate: 'temperate', wealth: 'rich',   airports: 4, ports: 3, borders: [56, 756, 380, 724, 620, 826], healthcare: 0.93 },
+  { iso: 250, name: 'France',         pop: 68000000,  climate: 'temperate', wealth: 'rich',   airports: 4, ports: 3, borders: [56, 756, 380, 724], healthcare: 0.93 },
   { iso: 276, name: 'Germany',        pop: 84000000,  climate: 'temperate', wealth: 'rich',   airports: 5, ports: 2, borders: [250, 56, 528, 756, 40, 203, 616, 208], healthcare: 0.94 },
   { iso: 724, name: 'Spain',          pop: 47000000,  climate: 'temperate', wealth: 'rich',   airports: 4, ports: 3, borders: [620, 250],     healthcare: 0.88 },
   { iso: 380, name: 'Italy',          pop: 60000000,  climate: 'temperate', wealth: 'rich',   airports: 4, ports: 3, borders: [250, 756, 40, 705], healthcare: 0.89 },
@@ -71,7 +71,7 @@ const COUNTRIES_DATA = [
   { iso: 716, name: 'Zimbabwe',       pop: 16000000,  climate: 'tropical',  wealth: 'poor',   airports: 1, ports: 0, borders: [710, 516, 508, 834], healthcare: 0.32 },
 
   // ─── SOUTH ASIA
-  { iso: 356, name: 'India',          pop: 1430000000,climate: 'tropical',  wealth: 'poor',   airports: 5, ports: 4, borders: [586, 50, 524, 156, 104, 144], healthcare: 0.50 },
+  { iso: 356, name: 'India',          pop: 1430000000,climate: 'tropical',  wealth: 'poor',   airports: 5, ports: 4, borders: [586, 50, 524, 156, 104], healthcare: 0.50 },
   { iso: 586, name: 'Pakistan',       pop: 235000000, climate: 'arid',      wealth: 'poor',   airports: 3, ports: 2, borders: [356, 364, 4, 156], healthcare: 0.40 },
   { iso: 50,  name: 'Bangladesh',     pop: 170000000, climate: 'tropical',  wealth: 'poor',   airports: 2, ports: 2, borders: [356, 104],      healthcare: 0.42 },
 

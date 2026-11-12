@@ -84,7 +84,7 @@ const Evolution = (() => {
       const ready = !st.blocked && st.affordable;
       const status = st.blocked
         ? `<span class="trait-cost locked-cost">${st.blocked}</span>`
-        : `<span class="trait-cost ${st.affordable ? '' : 'cant-afford'}">⚡ ${st.cost} DNA</span>
+        : `<span class="trait-cost ${st.affordable ? '' : 'cant-afford'}">${UI.icon('bolt')} ${st.cost} DNA</span>
            <span class="op-go">${st.affordable ? 'DEPLOY ›' : ''}</span>`;
       return `<div class="trait-card op-card${ready ? ' op-ready' : ''}${st.blocked ? ' locked' : ''}" data-op="${op.id}">
         <span class="trait-icon">${op.icon}</span>
@@ -97,7 +97,7 @@ const Evolution = (() => {
     container.querySelectorAll('.op-card').forEach(card => {
       card.addEventListener('click', () => {
         const result = Game.useOperation(card.dataset.op);
-        if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? '⚡ Not enough DNA!' : result.msg, 'red');
+        if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? 'Not enough DNA' : result.msg, 'red');
         else AudioEngine.sfxTraitPurchase();
         renderOps();
       });
@@ -133,11 +133,11 @@ const Evolution = (() => {
       ${effArr.length ? `<div class="trait-effects">${effArr.join(' · ')}</div>` : ''}
       <div class="trait-footer">
         ${owned
-          ? `<span class="trait-owned-badge">${free ? '🧬 MUTATED' : '✓ EVOLVED'}</span>
-             <button class="trait-devolve-btn" data-id="${trait.id}">↩ DEVOLVE${free ? '' : ` +${Math.max(1, Math.floor(trait.cost * 0.5))}`}</button>`
+          ? `<span class="trait-owned-badge">${free ? UI.icon('helix') + ' MUTATED' : UI.icon('check') + ' EVOLVED'}</span>
+             <button class="trait-devolve-btn" data-id="${trait.id}">DEVOLVE${free ? '' : ` +${Math.max(1, Math.floor(trait.cost * 0.5))}`}</button>`
           : locked
-            ? `<span class="trait-cost locked-cost">🔒 Needs ${trait.requires.filter(r => !gs.traits.has(r)).map(r => Game.findTrait(r)?.name || r).join(' + ')}</span>`
-            : `<span class="trait-cost ${afford ? '' : 'cant-afford'}">⚡ ${trait.cost} DNA</span>`
+            ? `<span class="trait-cost locked-cost">${UI.icon('lock')} Needs ${trait.requires.filter(r => !gs.traits.has(r)).map(r => Game.findTrait(r)?.name || r).join(' + ')}</span>`
+            : `<span class="trait-cost ${afford ? '' : 'cant-afford'}">${UI.icon('bolt')} ${trait.cost} DNA</span>`
         }
       </div>
     `;
@@ -227,8 +227,8 @@ const Evolution = (() => {
   // The engine announces trait changes, which re-renders the tree.
   function purchase(traitId) {
     const result = Game.buyTrait(traitId);
-    if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? '⚡ Not enough DNA!' : result.msg, 'red');
-    else AudioEngine.sfxTraitPurchase();
+    if (!result.ok) showFlash(result.msg === 'Not enough DNA' ? 'Not enough DNA' : result.msg, 'red');
+    else { AudioEngine.sfxTraitPurchase(); UI.buzz(10); }
   }
 
   function devolve(traitId) {
